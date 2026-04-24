@@ -19,6 +19,7 @@ from src.agents.supervisor import run_supervisor_stream
 from src.graph.state import Critique
 from src.llm.mock_provider import MockProvider
 from src.main import run_pipeline
+from src.skills.mcp_client import list_skills, read_skill
 
 
 GOLDEN_DIR = Path(__file__).resolve().parents[1] / "eval" / "golden_prds"
@@ -69,6 +70,16 @@ def _render_critique(c: dict) -> None:
         f"claim_id: {c.get('claim_id', '?')}  ·  "
         f"skill_id: {c.get('skill_id') or '—'}"
     )
+    # "💡 Triggered by" tag — links this critique back to the skill that fired.
+    skill_id = c.get("skill_id")
+    if skill_id:
+        st.markdown(
+            f"<span style='background:#fff8d6;color:#7a5d00;padding:2px 8px;"
+            f"border-radius:10px;font-size:0.8em;border:1px solid #e6d488;'>"
+            f"💡 Triggered by <code>{skill_id}</code></span>",
+            unsafe_allow_html=True,
+        )
+
     st.markdown(f"**Evidence:** {c.get('evidence', '')}")
     st.markdown(f"**Suggested fix:** {c.get('suggested_fix', '')}")
 
@@ -360,9 +371,53 @@ def _render_run(run: dict) -> None:
     _render_verdict(run.get("verdict") or {})
 
 
+def _render_skill_library_sidebar() -> None:
+    """Render the Skill Library panel in the Streamlit sidebar.
+
+    Pulls data through `src/skills/mcp_client.py` so the UI is already on
+    the same tool surface the MCP server will expose — swapping to a
+    transport-backed client later touches one import line.
+    """
+    st.sidebar.header("📚 Skill Library")
+    try:
+        skills = list_skills(status="active")
+    except Exception as e:  # pragma: no cover — defensive
+        st.sidebar.error(f"Failed to load library: {e}")
+        return
+
+    st.sidebar.caption(f"{len(skills)} active skill(s) · read-only")
+
+    for s in skills:
+        with st.sidebar.expander(f"{s['id']}", expanded=False):
+            st.markdown(f"**{s['name']}**")
+            st.caption(
+                f"injected_into: {', '.join(s.get('injected_into', [])) or '—'}"
+                f"  ·  conf {s.get('confidence', 0):.2f}"
+            )
+            st.write(s.get("description", ""))
+
+            # Click to load the full fragment body on demand (cheap — 6 skills).
+            if st.button("Show fragment", key=f"skill_body_{s['id']}"):
+                st.session_state[f"skill_body_open_{s['id']}"] = True
+            if st.session_state.get(f"skill_body_open_{s['id']}"):
+                try:
+                    full = read_skill(s["id"])
+                    body = full.get("prompt_fragment_content") or "_(empty fragment)_"
+                    st.markdown(body)
+                except Exception as e:  # pragma: no cover
+                    st.error(str(e))
+
+            # Curator actions — Day 8 wiring placeholders.
+            col_a, col_b = st.columns(2)
+            col_a.button("📌 Pin", key=f"pin_{s['id']}", disabled=True)
+            col_b.button("🗑 Deprecate", key=f"dep_{s['id']}", disabled=True)
+
+
 def main() -> None:
     st.set_page_config(page_title="PRD Stress Test", layout="wide")
     st.title("PRD Stress Test")
+
+    _render_skill_library_sidebar()
 
     golden = _load_golden_prds()
 

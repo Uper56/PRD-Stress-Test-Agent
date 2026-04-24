@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from ...graph.state import Critique, CrossChallenge, GraphState, PRDClaim
 from ...llm.provider import LLMProvider
+from ...skills import Skill, default_retriever, format_skills_block
 from .._parsing import extract_json
 
 logger = logging.getLogger(__name__)
@@ -64,12 +65,23 @@ emitting accurate ids (or honest nulls) is load-bearing for the eval harness.
 """
 
 
-def _format_user_message(prd_text: str, claims: list[PRDClaim]) -> str:
-    """Shape the user-turn payload given to every critic."""
+def _format_user_message(
+    prd_text: str,
+    claims: list[PRDClaim],
+    skills_block: str = "",
+) -> str:
+    """Shape the user-turn payload given to every critic.
+
+    If `skills_block` is non-empty, it is prepended as a `<retrieved_skills>`
+    XML section — critics' SKILL_CONTEXT_RULES instruct them to cite those
+    ids (and only those ids) on any critique the skill informed.
+    """
     claims_json = json.dumps(
         [c.model_dump() for c in claims], ensure_ascii=False, indent=2
     )
+    prefix = f"{skills_block}\n\n" if skills_block else ""
     return (
+        f"{prefix}"
         "PRD (line-numbered):\n\n"
         f"{prd_text}\n\n"
         "Extracted claims:\n"
@@ -94,7 +106,18 @@ async def run_critic(
     prd_text = state.get("prd_text", "")
     claims = state.get("prd_claims", []) or []
 
-    user_msg = _format_user_message(prd_text, claims)
+    # Retrieve relevant skills for this critic — injected as <retrieved_skills>
+    # in the user message. Graceful fallback: on any retrieval error we proceed
+    # without skills rather than blocking the critique.
+    retrieved: list[Skill] = []
+    try:
+        retrieved = default_retriever().retrieve(prd_text, critic_id)
+    except Exception as e:  # pragma: no cover — retriever is defensive
+        logger.warning("run_critic[%s]: skill retrieval failed: %s", critic_id, e)
+    skills_block = format_skills_block(retrieved)
+    retrieved_ids = [s.id for s in retrieved]
+
+    user_msg = _format_user_message(prd_text, claims, skills_block)
     response = await llm.complete(system=system_prompt, user=user_msg)
 
     obj = extract_json(response.text)
@@ -106,6 +129,20 @@ async def run_critic(
     for raw in obj.get("critiques", []):
         if isinstance(raw, dict):
             raw["critic_id"] = critic_id  # trust the caller, not the model
+            # If the model didn't name a skill but a skill was retrieved,
+            # tag the first retrieved skill so we still emit telemetry
+            # linking critiques back to the library. Callers can tell the
+            # difference from model-attributed skill_ids via the call_log.
+            if not raw.get("skill_id") and retrieved_ids:
+                raw["skill_id"] = retrieved_ids[0]
+            # Guardrail: never let a hallucinated skill id through.
+            if raw.get("skill_id") and raw["skill_id"] not in retrieved_ids:
+                logger.warning(
+                    "run_critic[%s]: dropping hallucinated skill_id %r",
+                    critic_id,
+                    raw["skill_id"],
+                )
+                raw["skill_id"] = None
         try:
             out.append(Critique.model_validate(raw))
         except ValidationError as e:

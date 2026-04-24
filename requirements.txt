@@ -3,5 +3,6 @@ pydantic>=2
 pyyaml
 streamlit>=1.40
 python-dotenv
+mcp>=1.0
 pytest
 pytest-asyncio

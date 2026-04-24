@@ -11,7 +11,7 @@ MCP server — not yet implemented.
 
 ---
 
-## 2. Progress — Days 1 through 6
+## 2. Progress — Days 1 through 7
 
 ### Day 1 — Scaffold
 - Repo skeleton, empty package tree, `.env.example`, `.gitignore`.
@@ -118,7 +118,58 @@ MCP server — not yet implemented.
   * 5-round cap appends the terminator chunk,
   * below-cap conversations do NOT emit the terminator.
 
-**Test suite: 24 tests, 0 warnings, runs in <0.7s.**
+### Day 7 — Skill Library + MCP Server (read-only)
+- **Data layer** (`src/skills/`):
+  * `schema.py` — `Skill` (adds `prompt_fragment_content` as a load-time-only
+    field) + `SkillLibrary` container with `by_id` / `active` helpers.
+  * `library.yaml` — 6 seed skills covering engineering (2) /
+    business / user_advocate / design / multi-role: `skl_001_api_dependency_enumeration`,
+    `skl_002_quantified_metrics`, `skl_003_phased_rollout`,
+    `skl_004_accessibility_check`, `skl_005_user_evidence`,
+    `skl_006_internal_contradiction`.
+  * `fragments/*.md` — one fragment per skill, following the
+    `When to apply / Instruction to inject / Rationale / Examples` shape.
+    Non-trivial content; each lists 3–6 concrete failure modes.
+  * `retriever.py` — `SkillRetriever.load_library()` reads YAML + every
+    fragment; `.retrieve(prd_text, critic_id, top_k=3)` filters by
+    `injected_into`, ranks by case-insensitive keyword hits (word-boundary
+    for single-word keywords, substring for multi-word). Zero-hit skills
+    are NOT force-injected — prompt stays clean. `format_skills_block()`
+    renders the winners as the `<retrieved_skills>` XML the critics expect.
+  * `mcp_client.py` — in-process mirror of the MCP server tool surface
+    (`list_skills`, `read_skill`, `search_skills`). Same signatures as
+    the real server; exists so tests and Streamlit can hit the tools
+    without spawning a subprocess. Swap to transport-backed client later
+    with one import change.
+- **MCP server** (`src/mcp_servers/skill_server.py`): **real FastMCP server**,
+  not a stub. Uses `mcp.server.fastmcp.FastMCP`, exposes the three tools
+  above, stdio transport. Run with `python -m src.mcp_servers.skill_server`.
+  README in `src/mcp_servers/README.md` documents launch + `.mcp.json`
+  registration. `mcp>=1.0` added to `requirements.txt`.
+- **Critic integration** (`src/agents/critics/_shared.py:run_critic`):
+  before the LLM call, retrieves top-K skills for the critic, prepends a
+  `<retrieved_skills>` block to the user message, and post-processes the
+  model's output so:
+  * Hallucinated `skill_id`s not in the retrieved set are dropped to `None`.
+  * Critiques with no model-attributed `skill_id` get backfilled with the
+    top retrieved skill's id, so telemetry survives even when the model
+    forgets to cite. Retrieval failures degrade to "no skills, continue".
+- **Streamlit extensions** (`src/ui/streamlit_app.py`):
+  * `📚 Skill Library` sidebar panel rendered from `mcp_client.list_skills`,
+    one expander per skill showing name / injected_into / confidence /
+    description, with a "Show fragment" button that calls
+    `mcp_client.read_skill` on demand. "📌 Pin" / "🗑 Deprecate" buttons
+    are visible but disabled — Day 8 wires them up.
+  * Each critique card now renders a `💡 Triggered by <skl_id>` chip when
+    `skill_id` is non-null. On a real golden PRD all four critics fire with
+    a skill_id populated.
+- **Tests** (`tests/test_skill_retriever.py`, 11 cases): library load +
+  fragment read, critic filtering, API-heavy ranking, no-match empty result,
+  XML block shape, end-to-end critic stamping, no-false-positive when
+  keywords are absent, MCP client list/read/search (including unknown-id
+  raises, filtered vs unfiltered search).
+
+**Test suite: 35 tests, 0 warnings, runs in <0.6s.**
 
 ---
 
@@ -146,7 +197,12 @@ MCP server — not yet implemented.
 | Streamlit app                    | `src/ui/streamlit_app.py`                             |
 | Golden PRDs + manifest           | `src/eval/golden_prds/` (5 `.md` + `manifest.yaml`)   |
 | Rubric stubs                     | `src/eval/rubric.py`                                  |
-| Tests                            | `tests/test_{mock_provider,pipeline,supervisor,cross_challenge}.py` |
+| Skill Library schema + retriever | `src/skills/{schema,retriever}.py`                    |
+| Skill library data               | `src/skills/library.yaml` + `src/skills/fragments/*.md` |
+| MCP server (read-only)           | `src/mcp_servers/skill_server.py` + `README.md`       |
+| MCP in-process client mirror     | `src/skills/mcp_client.py`                            |
+| Critique dialog (HITL)           | `src/agents/critique_dialog.py`                       |
+| Tests                            | `tests/test_{mock_provider,pipeline,supervisor,cross_challenge,critique_dialog,skill_retriever}.py` |
 | Package config                   | `pyproject.toml`                                      |
 
 Install + run:
@@ -201,9 +257,8 @@ is the whole reason for the provider abstraction.
   keys were parseable. Good for resilience, bad for strict eval scoring.
 - **Rubric functions are stubs** (`src/eval/rubric.py`). Implementation is
   scheduled alongside the eval harness (Day 7).
-- **Skill Library is architecturally wired but inert.** Critic prompts honor
-  a `<retrieved_skills>` block if present; no retriever or MCP server exists
-  yet. The `skill_id` field on every critique is always `null` in current runs.
+- **Skill Library shipped Day 7.** Retriever is keyword-based; see technical
+  debt section for the upgrade plan to embeddings (Day 10).
 - **No CrossChallenge telemetry.** `state.challenges` is produced and shown
   in UI but not yet logged to `data/results/` for later analysis.
 - **Streamlit UI is functional but unstyled.** Day 6 added HITL but not polish
@@ -217,70 +272,89 @@ is the whole reason for the provider abstraction.
 
 ---
 
-## 6. Next — Day 7: Skill Library + MCP Server (first cut)
+## 6. Technical debt ledger
 
-The Skill Library is the project's long-term differentiator — cross-PRD
-reusable review heuristics exposed as structured `skill_id`s that critics
-can cite. Today it's architecturally wired (prompt contract exists, critics
-know how to consume `<retrieved_skills>`, telemetry field is on every
-Critique) but there is no retriever and no server.
+Things that are intentionally cut corners. Each has a "must fix by" gate
+so they don't silently rot.
 
-### 7a. Skill Library data layer
+| # | Debt | Must fix by | Owner note |
+| - | ---- | ----------- | ---------- |
+| D-01 | `CONVERGENCE_SIMILARITY_THRESHOLD = 0.75` is a `difflib.SequenceMatcher` heuristic, not semantic similarity. | Day 10 (embeddings). | `src/graph/edges.py` |
+| D-02 | Skill retriever is keyword-based only. No synonyms, no embeddings, no learned weights. Confidence field is authored, never updated. | Day 10. | `src/skills/retriever.py` |
+| D-03 | Skill Library is read-only. Distiller / curator / pin / deprecate write tools not yet built (UI buttons exist but disabled). | Day 8. | `src/skills/`, Streamlit sidebar |
+| D-04 | `SupervisorVerdict` schema is loose — parse failures fall back to a placeholder dict merged with whatever keys were parseable. | Day 9 eval harness. | `src/agents/supervisor.py` |
+| D-05 | No CrossChallenge / critique / skill-hit telemetry persisted to `data/results/`. | Day 9. | — |
+| D-06 | Dialog module works only against MockProvider flavour text; it does NOT grow the reply based on the PM's question. Fine for demo, won't pass real eval. | Day 8 OpenAI wiring. | `src/llm/mock_provider.py` |
+| D-07 | Supervisor prompt has no token-budget guard. | Before first OpenAI call. | `src/agents/supervisor.py` |
+| D-08 | Streamlit UI is functional but unstyled — card borders, sticky header, dark-mode verification. | Rolled as Day 8 stretch. | `src/ui/streamlit_app.py` |
 
-- `src/skills/` new package:
-  * `store.py` — minimal SQLite or file-backed store. Schema:
-    `skill_id, name, body, dimension, created_at, hit_count`.
-  * `seed.py` — load 10–20 bootstrap skills derived from recurring findings
-    in the 5 golden PRDs. `SK-042: metric-triple-check`,
-    `SK-017: stripe-idempotency-key`, etc.
-  * `retriever.py` — for a given PRD (or list of PRDClaims), return the
-    top-K skills. Start with keyword matching (no embeddings yet);
-    upgrade later.
-- Wire the retriever into `src/main.py:run_pipeline`: after intake, before
-  critics, fetch skills and set `state["retrieved_skills"]`. Each critic's
-  user message gets a `<retrieved_skills>` block prepended.
-- Extend `tests/` with `test_skill_retrieval.py`: given a PRD with a metric
-  claim, `SK-042` comes back in the top-K.
-
-### 7b. MCP server (first cut)
-
-- `src/mcp_server/` — minimal MCP server exposing two tools:
-  * `search_skills(query: str, k: int) → list[Skill]`
-  * `record_skill_hit(skill_id: str) → None` (increments `hit_count`)
-- Stdio transport first; HTTP can come later.
-- Register it in `.mcp.json` at repo root so `claude mcp list` sees it.
-- Dogfood check: run a fresh PRD through the pipeline and confirm at
-  least one critique comes back with a non-null `skill_id`.
-
-### 7c. (Stretch) Frontend polish carried over from original Day 6 plan
-
-- Card-style layout with consistent borders and padding.
-- Unified severity-chip helper used by critic findings, verdict, and challenges.
-- Sticky header with claim / critique / challenge / verdict counts.
-- Dark-mode verification of the `#c62828` / `#ef9a00` / `#6d6d6d` palette.
-- Optional "Raw state JSON" debug expander.
-
-### Out of scope for Day 7
-
-- OpenAI wiring (Day 8), eval harness (Day 9), persistence to
-  `data/results/` (Day 9), embedding-based similarity (Day 10).
+**Note on MCP server:** Day 7 shipped a *real* FastMCP stdio server, not the
+fallback `mcp_client.py`-only path. Both surfaces exist and share the same
+`SkillRetriever`. If a future change breaks the FastMCP import, falling
+back to `mcp_client.py` alone is legitimate — but flag it explicitly in
+this table with a "revert by Day 10" gate.
 
 ---
 
-## Quick sanity checklist before starting Day 7
+## 7. Next — Day 8: Skill Distiller + Curator (write path)
+
+Day 7 shipped the read path. Day 8 adds the write path: a Distiller agent
+that proposes new skills after a run, a Curator UI that lets a human
+accept / deprecate / pin them, and the supporting MCP write tools.
+
+### 8a. Distiller agent
+
+- `src/agents/distiller.py:run_distiller(state, llm) -> list[Skill]`.
+  Input: the full post-supervisor `GraphState` (critiques + challenges +
+  verdict + PRD text). Output: 0–3 candidate skills phrased as
+  `Skill(status="proposed", created_by="distiller", learned_from_prds=[...])`.
+- Trigger heuristic: only propose a new skill when a critique carries
+  `skill_id=None` AND the finding's pattern repeats across critiques /
+  across PRDs (check `data/results/` history once it exists).
+- Prompt shape mirrors the fragment .md skeleton so the agent's output can
+  be written straight to disk if accepted.
+
+### 8b. Curator UI + write tools
+
+- `src/skills/writer.py`: `accept_skill(draft) → Skill`, `deprecate_skill(id)`,
+  `pin_skill(id)`. Acceptance writes to `library.yaml` + `fragments/*.md`
+  atomically (temp-file + rename); deprecate flips `status`.
+- New MCP tools on `skill_server`: `propose_skill`, `accept_skill`,
+  `deprecate_skill`. Every write goes through a human-in-the-loop gate —
+  the server's `accept_skill` will refuse unless the caller passes an
+  `approved_by` token set in the Streamlit UI.
+- Enable the `📌 Pin` / `🗑 Deprecate` buttons in the sidebar (currently
+  disabled placeholders). Wire a "Proposed skills" section that shows the
+  distiller's output after each run with Accept / Reject buttons.
+
+### 8c. OpenAI wiring (parallel track if the key arrives)
+
+- `src/llm/openai_provider.py` implementing `complete` + `stream` with
+  chunks shaped as `{"type":"text","delta":str}`.
+- Flip `src/config.py` branches, set `LLM_PROVIDER=openai` in `.env`.
+- Add token-budget guard on supervisor prompt (debt D-07).
+
+### Out of scope for Day 8
+
+- Eval harness (Day 9), persistence to `data/results/` (Day 9),
+  embedding-based similarity (Day 10), frontend polish (stretch any day).
+
+---
+
+## Quick sanity checklist before starting Day 8
 
 ```
-pip install -e .                   # package installs
-pytest tests/ -W error             # 24 pass, 0 warnings
+pip install -e .                              # package installs
+pip install -r requirements.txt               # includes mcp>=1.0
+pytest tests/ -W error                        # 35 pass, 0 warnings
+python -m src.mcp_servers.skill_server        # stdio server starts; Ctrl-C to exit
 streamlit run src/ui/streamlit_app.py
+  → Sidebar "📚 Skill Library" shows 6 active skills
+  → Each has an expander; "Show fragment" renders the full .md
   → Pick a golden PRD → Run
-  → 4 critic tabs populate; each critique has a "💬 Discuss" button
-  → Cross-Challenge shows ✅ Converged after round 2, one expander with 3 challenges
-  → 🟡 Thinking (done) block visible, 🟢 Verdict rendered
-  → Click "💬 Discuss" on any critique → chat panel opens inline
-  → Type a question → assistant reply streams word-by-word
-  → After 5 user turns, chat_input is replaced by a "cap reached" info box
-  → "💬 Close discussion" hides the panel; reopening preserves history
+  → Every critique card carries a "💡 Triggered by skl_xxx" chip
+  → "💬 Discuss" buttons still work (Day 6 regression)
+  → Cross-Challenge + Supervisor sections unchanged (Day 5/4 regression)
 ```
 
-If any step above fails, do NOT start Day 7 — fix the regression first.
+If any step above fails, do NOT start Day 8 — fix the regression first.

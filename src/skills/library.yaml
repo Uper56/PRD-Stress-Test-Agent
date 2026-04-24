@@ -1,0 +1,195 @@
+# Skill Library — seed entries.
+#
+# Metadata only. The authoritative content of each skill lives in the file
+# referenced by `prompt_fragment_path` (relative to src/skills/), which is
+# spliced into the relevant critic's system prompt at retrieval time.
+#
+# To add a skill: drop a new .md into fragments/, then append an entry here.
+
+skills:
+  - id: skl_001_api_dependency_enumeration
+    name: API Dependency Enumeration
+    description: >-
+      Engineering critiques must check whether every third-party API
+      (payments, auth, email, analytics, ML) is explicitly enumerated with
+      a fallback plan, SLA expectation, and failure-mode handling.
+    trigger_keywords:
+      - api
+      - endpoint
+      - integration
+      - third-party
+      - webhook
+      - sdk
+      - stripe
+      - twilio
+      - oauth
+      - openai
+    trigger_semantic: >-
+      PRD mentions any external API, SDK, webhook, or third-party service
+      without enumerating dependencies, SLAs, or failure handling.
+    injected_into:
+      - engineering
+    prompt_fragment_path: fragments/skl_001_api_dependency_enumeration.md
+    confidence: 0.85
+    usage_count: 0
+    acceptance_rate: null
+    created_at: "2026-04-24"
+    created_by: seed
+    learned_from_prds: []
+    status: active
+
+  - id: skl_002_quantified_metrics
+    name: Quantified Metrics (Baseline / Target / Window)
+    description: >-
+      Every success metric must name (a) a current baseline, (b) a target
+      value, and (c) a measurement window. Anything less is unmeasurable.
+    trigger_keywords:
+      - metric
+      - kpi
+      - success
+      - deflect
+      - reduce
+      - increase
+      - retention
+      - conversion
+      - adoption
+      - north star
+    trigger_semantic: >-
+      PRD states a success metric, KPI, or target percentage without
+      specifying baseline, target, and measurement window together.
+    injected_into:
+      - business
+    prompt_fragment_path: fragments/skl_002_quantified_metrics.md
+    confidence: 0.9
+    usage_count: 0
+    acceptance_rate: null
+    created_at: "2026-04-24"
+    created_by: seed
+    learned_from_prds: []
+    status: active
+
+  - id: skl_003_phased_rollout
+    name: Phased Rollout / Gated Launch
+    description: >-
+      Any launch must define a rollout ladder (e.g. 1% → 10% → 50% → 100%)
+      with rollback criteria and kill-switch ownership. Day-1 100% launches
+      are a systems risk.
+    trigger_keywords:
+      - launch
+      - rollout
+      - ship
+      - release
+      - day 1
+      - ga
+      - 100%
+      - all users
+      - everyone
+    trigger_semantic: >-
+      PRD describes a launch, rollout, or release without naming a staged
+      ramp, rollback criteria, or kill switch.
+    injected_into:
+      - engineering
+    prompt_fragment_path: fragments/skl_003_phased_rollout.md
+    confidence: 0.82
+    usage_count: 0
+    acceptance_rate: null
+    created_at: "2026-04-24"
+    created_by: seed
+    learned_from_prds: []
+    status: active
+
+  - id: skl_004_accessibility_check
+    name: Accessibility (WCAG / Screen Reader / Keyboard)
+    description: >-
+      Design critiques must check for WCAG AA contrast, keyboard
+      navigability, screen-reader labels, and non-color-only affordances
+      on every new UI surface.
+    trigger_keywords:
+      - ui
+      - screen
+      - button
+      - modal
+      - dialog
+      - form
+      - color
+      - accessibility
+      - a11y
+      - keyboard
+      - tooltip
+      - icon
+    trigger_semantic: >-
+      PRD specifies a new UI surface (screen, modal, form, button) without
+      calling out accessibility requirements.
+    injected_into:
+      - design
+    prompt_fragment_path: fragments/skl_004_accessibility_check.md
+    confidence: 0.78
+    usage_count: 0
+    acceptance_rate: null
+    created_at: "2026-04-24"
+    created_by: seed
+    learned_from_prds: []
+    status: active
+
+  - id: skl_005_user_evidence
+    name: User Evidence Required
+    description: >-
+      User-pain claims must be backed by data (interviews, support tickets,
+      analytics, surveys). Asserted pain without evidence is founder-fiction.
+    trigger_keywords:
+      - users want
+      - users need
+      - customers complain
+      - pain point
+      - friction
+      - frustrated
+      - users struggle
+      - feedback
+      - interviews
+    trigger_semantic: >-
+      PRD asserts a user pain, need, or frustration without citing a
+      concrete data source (tickets, interviews, analytics, survey).
+    injected_into:
+      - user_advocate
+    prompt_fragment_path: fragments/skl_005_user_evidence.md
+    confidence: 0.87
+    usage_count: 0
+    acceptance_rate: null
+    created_at: "2026-04-24"
+    created_by: seed
+    learned_from_prds: []
+    status: active
+
+  - id: skl_006_internal_contradiction
+    name: Internal Contradiction Scan
+    description: >-
+      Check whether statements in different PRD sections contradict each
+      other — e.g. "opt-in only" in one section and "all users get" in
+      another, or mutually incompatible timelines / scope / SLA numbers.
+    trigger_keywords:
+      - all users
+      - every user
+      - opt-in
+      - opt-out
+      - mandatory
+      - optional
+      - required
+      - however
+      - but
+      - except
+    trigger_semantic: >-
+      PRD contains multiple sections whose requirements, scope, or
+      constraints may contradict one another.
+    injected_into:
+      - engineering
+      - business
+      - user_advocate
+      - design
+    prompt_fragment_path: fragments/skl_006_internal_contradiction.md
+    confidence: 0.8
+    usage_count: 0
+    acceptance_rate: null
+    created_at: "2026-04-24"
+    created_by: seed
+    learned_from_prds: []
+    status: active
