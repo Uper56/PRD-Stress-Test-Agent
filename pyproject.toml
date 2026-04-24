@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prd-stress-test"
+version = "0.1.0"
+description = "Multi-agent PRD stress-test system."
+requires-python = ">=3.11"
+
+# Explicitly register `src` (and every sub-package) as an importable package.
+# Needed because the directory is literally named `src/`; setuptools'
+# src-layout auto-discovery expects `src/<pkgname>/...` and would otherwise
+# install nothing. With this, `pip install -e .` drops an entry that makes
+# `import src.main` work from any CWD — including when Streamlit runs a
+# script from inside `src/ui/`.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+namespaces = false
+
+[tool.pytest.ini_options]
+# Add the repo root to sys.path so `import src.xxx` works in tests *and*
+# from `streamlit run src/ui/streamlit_app.py` (Streamlit uses cwd too).
+pythonpath = ["."]
+# Auto-run every `async def test_*` — no need to decorate each one.
+asyncio_mode = "auto"
+testpaths = ["tests"]

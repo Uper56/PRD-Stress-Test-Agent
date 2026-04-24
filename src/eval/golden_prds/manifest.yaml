@@ -1,0 +1,141 @@
+# Golden PRD manifest — used by the eval harness to align critique output
+# against pre-labeled defects.
+#
+# Each defect has:
+#   id         stable identifier within the PRD
+#   severity   P0 | P1 | P2 (matches Critique severity)
+#   dimension  metric_quality | dependency_identification |
+#              internal_contradiction | risk_management | scope_ambiguity
+#   note       short human description (the text inside the HTML comment)
+
+prds:
+  - file: prd_001_ai_support_widget.md
+    title: "AI Support Widget"
+    defect_count: 5
+    defects:
+      - id: D1
+        severity: P0
+        dimension: risk_management
+        note: "No kill-switch / rollback / phased rollout."
+      - id: D2
+        severity: P0
+        dimension: internal_contradiction
+        note: "Solution forbids human escalation; UX includes a 'Talk to an agent' button."
+      - id: D3
+        severity: P2
+        dimension: scope_ambiguity
+        note: "'Supports all major languages' is undefined."
+      - id: D4
+        severity: P0
+        dimension: metric_quality
+        note: "40% deflection target without baseline, window, or definition."
+      - id: D5
+        severity: P1
+        dimension: dependency_identification
+        note: "LLM provider not listed; rate-limit, cost, PII unaddressed."
+
+  - file: prd_002_loyalty_program.md
+    title: "Storefront Loyalty Program"
+    defect_count: 5
+    defects:
+      - id: D1
+        severity: P0
+        dimension: internal_contradiction
+        note: "Problem cites point-worthlessness; Solution preserves it (1pt=$0.001)."
+      - id: D2
+        severity: P1
+        dimension: risk_management
+        note: "No migration plan for 2M existing customers."
+      - id: D3
+        severity: P1
+        dimension: metric_quality
+        note: "'Increase repeat purchase' with no baseline, target, or window."
+      - id: D4
+        severity: P2
+        dimension: scope_ambiguity
+        note: "'Phased rollout' undefined."
+      - id: D5
+        severity: P1
+        dimension: dependency_identification
+        note: "Email service, analytics pipeline, expiry cron not listed."
+
+  - file: prd_003_onboarding_redesign.md
+    title: "New-User Onboarding Redesign"
+    defect_count: 4
+    defects:
+      - id: D1
+        severity: P2
+        dimension: scope_ambiguity
+        note: "Mobile/web parity spec missing."
+      - id: D2
+        severity: P1
+        dimension: internal_contradiction
+        note: "UX says skip-able; Requirements says mandatory."
+      - id: D3
+        severity: P1
+        dimension: metric_quality
+        note: "'Reduce drop-off' — no baseline, target, or window."
+      - id: D4
+        severity: P1
+        dimension: risk_management
+        note: "100% launch with no A/B test or rollback plan."
+
+  - file: prd_004_internal_dashboard.md
+    title: "Internal Growth Dashboard"
+    defect_count: 4
+    defects:
+      - id: D1
+        severity: P2
+        dimension: scope_ambiguity
+        note: "'Near real-time' undefined."
+      - id: D2
+        severity: P1
+        dimension: dependency_identification
+        note: "CRM (Salesforce) data source for attribution not listed."
+      - id: D3
+        severity: P2
+        dimension: metric_quality
+        note: "'Adopted by PMs' lacks measurement method."
+      - id: D4
+        severity: P1
+        dimension: risk_management
+        note: "No PII review, retention, or access-audit logging."
+
+  - file: prd_005_payment_retry.md
+    title: "Failed-Payment Retry"
+    defect_count: 5
+    defects:
+      - id: D1
+        severity: P0
+        dimension: internal_contradiction
+        note: "24h retry window conflicts with 'immediate' failure notification."
+      - id: D2
+        severity: P2
+        dimension: scope_ambiguity
+        note: "'Retryable failures' decline codes undefined."
+      - id: D3
+        severity: P1
+        dimension: metric_quality
+        note: "15% recovery target lacks window, guardrails."
+      - id: D4
+        severity: P0
+        dimension: risk_management
+        note: "No circuit breaker for processor outage."
+      - id: D5
+        severity: P0
+        dimension: dependency_identification
+        note: "Stripe idempotency key, card-network retry rules, webhook handling unspecified."
+
+totals:
+  prd_count: 5
+  defect_count: 23
+  by_dimension:
+    metric_quality: 5
+    dependency_identification: 4
+    internal_contradiction: 4
+    risk_management: 5
+    scope_ambiguity: 5
+  by_severity:
+    P0: 7
+    P1: 10
+    P2: 6

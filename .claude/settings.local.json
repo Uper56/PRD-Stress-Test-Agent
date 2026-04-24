@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -W error)",
+      "Bash(python -m pip install -r requirements.txt)",
+      "Bash(python -c \"import src; print\\(src.__file__\\)\")",
+      "Bash(python -c \"import src.main\")",
+      "Bash(pip show *)",
+      "Bash(python -c \"import importlib.metadata as m; d = m.distribution\\('prd-stress-test'\\); print\\([f for f in d.files or [] if 'src' in str\\(f\\).lower\\(\\) or str\\(f\\).endswith\\('.py'\\)][:10]\\)\")",
+      "Bash(pip install *)",
+      "Bash(cd /tmp)",
+      "Bash(python -c \"import src, src.main, src.llm.provider, src.graph.builder, src.ui.streamlit_app; print\\('All imports OK from CWD:', __import__\\('os'\\).getcwd\\(\\)\\); print\\('src located at:', src.__file__\\)\")",
+      "Bash(python -m pytest tests/test_critique_dialog.py -W error)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('src/ui/streamlit_app.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\")"
+    ]
+  }
+}

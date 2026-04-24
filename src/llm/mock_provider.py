@@ -1,0 +1,333 @@
+"""Mock LLM provider used before a real API key is wired up.
+
+Returns deterministic canned responses keyed off keywords in the system prompt,
+so downstream agents can be exercised end-to-end without network calls.
+
+Canned payloads are intentionally shape-compatible with the real agent output
+schemas (PRDClaim, Critique) so that the pipeline's JSON parsers do not have
+to branch on "is this mock data". A top-level `role` field is preserved for
+routing tests and debug logs.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+from typing import AsyncIterator
+
+from .provider import LLMProvider, LLMResponse
+
+
+_CANNED: dict[str, dict] = {
+    "intake": {
+        "role": "intake",
+        "claims": [
+            {
+                "claim_id": "C-001",
+                "source_line": 1,
+                "claim_text": "Mock top-line claim extracted from the PRD.",
+                "claim_type": "assumption",
+            },
+            {
+                "claim_id": "C-002",
+                "source_line": 2,
+                "claim_text": "Deflect 40% of inbound tickets.",
+                "claim_type": "metric",
+            },
+            {
+                "claim_id": "C-003",
+                "source_line": 3,
+                "claim_text": "Ship to 100% of users on Day 1.",
+                "claim_type": "scope",
+            },
+        ],
+    },
+    "user advocate": {
+        "role": "user_advocate",
+        "critiques": [
+            {
+                "critic_id": "user_advocate",
+                "claim_id": "C-001",
+                "severity": "P1",
+                "finding": "Onboarding path for first-time users is not described.",
+                "evidence": 'line 1: "Mock top-line claim extracted from the PRD."',
+                "suggested_fix": "Specify the first-run experience for new accounts.",
+                "skill_id": None,
+            }
+        ],
+    },
+    "engineering": {
+        "role": "engineering",
+        "critiques": [
+            {
+                "critic_id": "engineering",
+                "claim_id": "C-001",
+                "severity": "P1",
+                "finding": "No rate-limit strategy is defined for the public endpoint.",
+                "evidence": 'line 1: "Mock top-line claim extracted from the PRD."',
+                "suggested_fix": "Add a token-bucket rate limiter at the API gateway.",
+                "skill_id": None,
+            }
+        ],
+    },
+    "business": {
+        "role": "business",
+        "critiques": [
+            {
+                "critic_id": "business",
+                "claim_id": "C-002",
+                "severity": "P0",
+                "finding": "Success metric lacks baseline and measurement window.",
+                "evidence": 'line 2: "Deflect 40% of inbound tickets."',
+                "suggested_fix": "Add current baseline volume and a 30-day window.",
+                "skill_id": None,
+            }
+        ],
+    },
+    "design": {
+        "role": "design",
+        "critiques": [
+            {
+                "critic_id": "design",
+                "claim_id": "C-001",
+                "severity": "P2",
+                "finding": "Error states are not defined for the primary flow.",
+                "evidence": 'line 1: "Mock top-line claim extracted from the PRD."',
+                "suggested_fix": "Add empty / loading / error / offline state specs.",
+                "skill_id": None,
+            }
+        ],
+    },
+    # Supervisor is handled specially below — it returns an XML envelope, not
+    # a bare JSON object — so it is keyed separately from the JSON responders.
+}
+
+
+_SUPERVISOR_VERDICT: dict = {
+    "executive_summary": (
+        "One P0 blocker on metric quality plus two P1 ops / UX concerns; "
+        "ship is gated on tightening the success metric."
+    ),
+    "p0_blockers": ["Success metric lacks baseline and measurement window."],
+    "p1_concerns": [
+        "Onboarding path for first-time users is not described.",
+        "No rate-limit strategy is defined for the public endpoint.",
+    ],
+    "p2_suggestions": ["Define non-happy UI states (empty / loading / error)."],
+    "conflict_resolutions": [
+        "user_advocate challenged business:C-002 — resolution: keep business's "
+        "P0 on metric baseline/window, but require a paired qualitative signal.",
+        "engineering challenged design:C-001 — resolution: design P2 stands; "
+        "scope full state matrix as a phased follow-up.",
+    ],
+}
+
+# Mock supervisor response uses the XML envelope the real model is prompted
+# for. Tokens are space-separated so the word-splitting stream() emits chunks
+# that are realistic and the <thinking>/<verdict> tags stay intact.
+_SUPERVISOR_TEXT = (
+    "<thinking>\n"
+    "Four critics produced four findings. Business flagged a P0 on metric "
+    "quality (C-002) which outranks the UX P1s from user_advocate and design. "
+    "No direct contradictions between critics — engineering's rate-limit "
+    "finding and user_advocate's onboarding finding are independent concerns. "
+    "No severity escalation from consensus is needed.\n"
+    "</thinking>\n"
+    "<verdict>\n"
+)
+_SUPERVISOR_TEXT += json.dumps(_SUPERVISOR_VERDICT, ensure_ascii=False)
+_SUPERVISOR_TEXT += "\n</verdict>"
+
+
+# ---- Cross-challenge canned responses --------------------------------------
+# Round 1: each critic pushes back on exactly one other critic's finding.
+# Round 2: everyone abstains, which triggers the "empty new round" convergence
+# path in edges.run_cross_challenge.
+
+def _critic_from_prompt(system_lower: str) -> str | None:
+    for keyword, critic_id in (
+        ("user advocate", "user_advocate"),
+        ("engineering", "engineering"),
+        ("business", "business"),
+        ("design", "design"),
+    ):
+        if keyword in system_lower:
+            return critic_id
+    return None
+
+
+_CHALLENGES_ROUND_1: dict[str, list[dict]] = {
+    "user_advocate": [
+        {
+            "round": 1,
+            "challenger": "user_advocate",
+            "target_critique_id": "business:C-002",
+            "counter_finding": (
+                "Quantitative baseline/window alone misses qualitative "
+                "signals users give in interviews."
+            ),
+        }
+    ],
+    "engineering": [
+        {
+            "round": 1,
+            "challenger": "engineering",
+            "target_critique_id": "design:C-001",
+            "counter_finding": (
+                "Full non-happy state matrix exceeds the stated build budget; "
+                "phase it in rather than blocking launch."
+            ),
+        }
+    ],
+    "business": [
+        {
+            "round": 1,
+            "challenger": "business",
+            "target_critique_id": "engineering:C-001",
+            "counter_finding": (
+                "Rate-limit spend is unjustified without a revenue-at-risk "
+                "number — cheaper guardrail may suffice."
+            ),
+        }
+    ],
+    "design": [],  # nothing to challenge in round 1
+}
+
+
+def _match_challenge(system_lower: str) -> dict:
+    """Return a canned challenges payload keyed by critic + round.
+
+    Round 2 returns empty lists across the board, triggering the empty-new-round
+    convergence branch in edges.run_cross_challenge.
+    """
+    round_n = 2 if "round 2" in system_lower else 1
+    critic = _critic_from_prompt(system_lower)
+    if critic is None:
+        return {"challenges": []}
+    if round_n == 1:
+        return {"challenges": _CHALLENGES_ROUND_1.get(critic, [])}
+    # Round 2: everyone abstains.
+    return {"challenges": []}
+
+
+_DIALOG_FLAVOR: dict[str, str] = {
+    "user_advocate": (
+        "From the user's side: this ranking is about real friction, not "
+        "polish. If the onboarding path is undefined, first-run users drop "
+        "off before they see any value. That's why I held it at P1 — not "
+        "because it's catastrophic, but because user trust is fragile early."
+    ),
+    "engineering": (
+        "Technically, the concern is load predictability. Without a rate-"
+        "limit policy the gateway can be starved by a single noisy client, "
+        "which is a systems risk, not a UX one. I'd be willing to drop the "
+        "severity if there's already an upstream guard — is there?"
+    ),
+    "business": (
+        "From a commercial lens: a metric without baseline and window can "
+        "neither be measured nor defended at review. That's why I called "
+        "this P0 — it blocks OKR alignment downstream, not just the launch."
+    ),
+    "design": (
+        "Design-wise, the non-happy states are where user trust is actually "
+        "built or broken. I kept this at P2 because the main flow still "
+        "works, but error/empty/offline should not be deferred indefinitely "
+        "— they're the polish that compounds."
+    ),
+}
+
+
+def _dialog_flavor_for(system_lower: str) -> str:
+    critic = _critic_from_prompt(system_lower)
+    if critic is None:
+        return (
+            "Thanks for the follow-up. My original reasoning still holds, "
+            "but I'm open to adjusting the severity if you can show me "
+            "contradicting evidence in the PRD."
+        )
+    return _DIALOG_FLAVOR[critic]
+
+
+def _match(system: str) -> dict | str:
+    """Pick a canned payload based on keywords in the system prompt.
+
+    Returns a dict for JSON-shaped responders and a raw string for supervisor
+    (which wraps JSON inside an XML envelope) or dialog mode (plain prose).
+    """
+    s = system.lower()
+    if "supervisor" in s:
+        return _SUPERVISOR_TEXT
+    # Dialog mode must be checked BEFORE the plain-critic fallback, because
+    # the dialog system prompt is `<critic prompt> + <dialog preamble>` and
+    # would otherwise match the critic branch and return JSON.
+    if "dialog mode" in s or "讨论这个问题" in system or "discussion" in s:
+        return _dialog_flavor_for(s)
+    # Cross-challenge check runs before the plain-critic fallback because the
+    # challenge prompt is the critic prompt + a suffix — both substrings match.
+    if "cross-challenge" in s:
+        return _match_challenge(s)
+    # Order matters: "intake" first so it doesn't get shadowed by any critic.
+    for key in ("intake", "user advocate", "engineering", "business", "design"):
+        if key in s:
+            return _CANNED[key]
+    return {"role": "unknown", "note": "No canned response matched."}
+
+
+class MockProvider(LLMProvider):
+    """Deterministic mock implementation of LLMProvider."""
+
+    model_id: str = "mock-1"
+
+    def __init__(self) -> None:
+        self.call_log: list[dict] = []
+
+    async def complete(
+        self,
+        system: str,
+        user: str,
+        *,
+        max_tokens: int | None = None,
+        temperature: float = 0.7,
+    ) -> LLMResponse:
+        payload = _match(system)
+        self.call_log.append(
+            {
+                "method": "complete",
+                "system": system,
+                "user": user,
+                "payload": payload,
+            }
+        )
+        # Supervisor payload is already an XML envelope string; everyone else
+        # gets JSON-serialized.
+        text = payload if isinstance(payload, str) else json.dumps(
+            payload, ensure_ascii=False
+        )
+        return LLMResponse(
+            text=text,
+            thinking=None,
+            usage={"input_tokens": len(system) + len(user), "output_tokens": len(text)},
+            model_id=self.model_id,
+        )
+
+    async def stream(
+        self,
+        system: str,
+        user: str,
+        *,
+        max_tokens: int | None = None,
+        temperature: float = 0.7,
+    ) -> AsyncIterator[dict]:
+        response = await self.complete(
+            system, user, max_tokens=max_tokens, temperature=temperature
+        )
+        self.call_log.append({"method": "stream", "system": system, "user": user})
+        # Per-chunk sleep gives Streamlit's render loop something to paint
+        # between deltas; tests disable it via MOCK_STREAM_DELAY=0 so they
+        # stay sub-second.
+        delay = float(os.getenv("MOCK_STREAM_DELAY", "0.02"))
+        for word in response.text.split(" "):
+            yield {"type": "text", "delta": word + " "}
+            if delay > 0:
+                await asyncio.sleep(delay)
