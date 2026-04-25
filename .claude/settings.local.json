@@ -17,7 +17,14 @@
       "Bash(python -c \"from mcp.server.fastmcp import FastMCP; print\\('FastMCP OK'\\)\")",
       "Bash(python -c ' *)",
       "Bash(python -c \"from src.mcp_servers.skill_server import mcp; print\\('skill_server imports OK'\\)\")",
-      "Bash(python -m pytest tests/test_skill_retriever.py -W error)"
+      "Bash(python -m pytest tests/test_skill_retriever.py -W error)",
+      "Bash(python -m pytest tests/test_history_store.py tests/test_skill_curator.py -W error)",
+      "Bash(rm -rf data/results/history)",
+      "Bash(git mv *)",
+      "Bash(rm -rf data/results/history/*.json data/results/history/*.jsonl)",
+      "Bash(ls data/results/history/)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }
