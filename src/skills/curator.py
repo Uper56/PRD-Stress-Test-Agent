@@ -1,23 +1,14 @@
-"""Skill Library write side — usage tracking + future curation hooks.
+"""Skill Library write side — runtime telemetry + future curation hooks.
 
-Day 8 implements only `increment_usage`. `update_acceptance` and
-`deprecate` are placeholders so Day 9 (Distiller + Curator UI) can wire
-them up without a second round of imports/threading.
+Day 8.5 split: telemetry now lives in `runtime_stats.yaml`, NOT in the
+`SKILL.md` frontmatter. This means:
 
-Persistence
------------
-We rewrite `library.yaml` via PyYAML. PyYAML drops comments and re-orders
-keys to its own sort order (we mitigate the ordering loss by setting
-`sort_keys=False`, but the leading file-header comment block IS lost on
-the first write).
+  - Each PRD run only mutates `runtime_stats.yaml`. SKILL.md files (the
+    design-time content of each skill) stay diff-clean across runs.
+  - Distiller-authored skills (Day 9) drop their stats row in here at
+    creation time, sidestepping any race with usage bumping.
 
-To preserve the human-authored top comment, we hardcode the canonical header
-in `_LIBRARY_HEADER` and re-prepend it on every write. The comment is part
-of the persisted contract, not metadata maintained by the YAML library.
-
-If a future Day requires preserving inline comments on individual skills,
-swap PyYAML for `ruamel.yaml` (round-trip mode) — at the cost of a heavier
-dependency. See HANDOFF.md technical-debt ledger.
+`update_acceptance` and `deprecate` remain stubs; Day 9 fills them in.
 """
 
 from __future__ import annotations
@@ -25,76 +16,80 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
-from .retriever import DEFAULT_LIBRARY_PATH, default_retriever
+from .retriever import RUNTIME_STATS_PATH, default_retriever
 
 logger = logging.getLogger(__name__)
 
 
-_LIBRARY_HEADER = """\
-# Skill Library — seed entries.
+_RUNTIME_HEADER = """\
+# Runtime telemetry for skills, keyed by SKILL.md `name`.
 #
-# Metadata only. The authoritative content of each skill lives in the file
-# referenced by `prompt_fragment_path` (relative to src/skills/), which is
-# spliced into the relevant critic's system prompt at retrieval time.
+# This file is the ONLY place runtime data lives. SKILL.md frontmatter and
+# bodies (under src/skills/seed/ and src/skills/learned/) stay diff-clean
+# across PRD runs; only this file is touched by the SkillCurator.
 #
-# To add a skill: drop a new .md into fragments/, then append an entry here.
+# Atomic writes via tempfile + os.replace; safe to read concurrently.
 """
 
 
-# Canonical key order on the disk format. Anything not listed appears after
-# in insertion order. Matches the seed file so diffs stay minimal.
-_KEY_ORDER = [
-    "id",
-    "name",
-    "description",
-    "trigger_keywords",
-    "trigger_semantic",
-    "injected_into",
-    "prompt_fragment_path",
-    "confidence",
+# Canonical key order for each skill's stats block. Matches runtime_stats.yaml
+# so diffs stay tight and reviewable.
+_STATS_KEY_ORDER = [
     "usage_count",
     "acceptance_rate",
-    "created_at",
-    "created_by",
-    "learned_from_prds",
+    "last_used",
     "status",
+    "learned_from_prds",
 ]
 
 
 class SkillCurator:
-    """Mutates `library.yaml` safely. One instance per writer; no in-memory cache."""
+    """Mutates `runtime_stats.yaml` safely. One instance per writer; no cache."""
 
-    def __init__(self, library_path: Path | str = DEFAULT_LIBRARY_PATH) -> None:
-        self.library_path = Path(library_path)
+    def __init__(self, runtime_stats_path: Path | str = RUNTIME_STATS_PATH) -> None:
+        self.runtime_stats_path = Path(runtime_stats_path)
 
     # ---- the only Day-8 mutator ------------------------------------------
 
-    def increment_usage(self, skill_ids: list[str]) -> None:
-        """Bump `usage_count` by 1 for each id given (de-duplicated).
+    def increment_usage(self, skill_names: list[str]) -> None:
+        """Bump `usage_count` by 1 for each skill name given (de-duplicated).
 
-        A single call with `["skl_001", "skl_001"]` increments by 1, not 2 —
-        a single PRD run that retrieves the same skill for multiple critics
-        should still count as one use.
+        A single call with `["foo", "foo"]` increments by 1, not 2 — a
+        single PRD run that retrieves the same skill for multiple critics
+        should still count as one use. Also stamps `last_used` to now.
+
+        Unknown names are silently ignored (logged at debug). Empty input
+        is a no-op.
         """
-        unique_ids = set(filter(None, skill_ids))
-        if not unique_ids:
+        unique_names = set(filter(None, skill_names))
+        if not unique_names:
             return
 
         try:
             data = self._read()
+            stats_map = data.setdefault("skills", {}) or {}
+            data["skills"] = stats_map
             mutated = False
-            for entry in data.get("skills", []):
-                if entry.get("id") in unique_ids:
-                    entry["usage_count"] = int(entry.get("usage_count", 0)) + 1
-                    mutated = True
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            for name in unique_names:
+                if name not in stats_map:
+                    # Silently skip unknown — keeps test_unknown_id_is_ignored
+                    # semantics. A future Day can choose to register stubs.
+                    continue
+                entry = stats_map[name] or {}
+                entry["usage_count"] = int(entry.get("usage_count", 0) or 0) + 1
+                entry["last_used"] = now
+                stats_map[name] = entry
+                mutated = True
             if mutated:
                 self._write(data)
                 # Bust the retriever's in-memory cache so the next read sees
-                # the new counts (matters for the Streamlit sidebar).
+                # the fresh counts (Streamlit sidebar rerender).
                 try:
                     default_retriever()._library = None  # type: ignore[attr-defined]
                 except Exception:  # pragma: no cover
@@ -106,43 +101,44 @@ class SkillCurator:
 
     def update_acceptance(
         self,
-        skill_id: str,  # noqa: ARG002 — Day 9 will use these
+        skill_name: str,  # noqa: ARG002 — Day 9 will use these
         accepted: bool,  # noqa: ARG002
     ) -> None:
         """Update `acceptance_rate` after a HITL accept/reject decision.
 
-        Stub — implemented in Day 9 alongside the curator UI. Defined here
-        so callers can import the API surface today.
+        Stub — implemented in Day 9 alongside the curator UI.
         """
         raise NotImplementedError("update_acceptance lands in Day 9")
 
     def deprecate(
         self,
-        skill_id: str,  # noqa: ARG002
+        skill_name: str,  # noqa: ARG002
         reason: str,  # noqa: ARG002
     ) -> None:
-        """Flip `status` to `"deprecated"` and stamp the reason.
-
-        Stub — implemented in Day 9.
-        """
+        """Flip `status` to `"deprecated"` and stamp the reason. Stub for Day 9."""
         raise NotImplementedError("deprecate lands in Day 9")
 
     # ---- internals --------------------------------------------------------
 
     def _read(self) -> dict:
-        with self.library_path.open("r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
+        if not self.runtime_stats_path.exists():
+            return {"skills": {}}
+        with self.runtime_stats_path.open("r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {"skills": {}}
 
     def _write(self, data: dict) -> None:
-        """Atomic write: tempfile → fsync → rename. Yaml header re-prepended."""
-        # Reorder each skill's keys so the diff stays small / human-friendly.
-        for skill in data.get("skills", []) or []:
-            ordered = {k: skill[k] for k in _KEY_ORDER if k in skill}
-            for k in skill:
+        """Atomic write: tempfile → fsync → rename. Header re-prepended."""
+        # Reorder each skill's stat keys so the diff stays human-friendly.
+        skills_map = data.get("skills") or {}
+        ordered_skills: dict = {}
+        for name, entry in skills_map.items():
+            entry = entry or {}
+            ordered = {k: entry[k] for k in _STATS_KEY_ORDER if k in entry}
+            for k in entry:
                 if k not in ordered:
-                    ordered[k] = skill[k]
-            skill.clear()
-            skill.update(ordered)
+                    ordered[k] = entry[k]
+            ordered_skills[name] = ordered
+        data["skills"] = ordered_skills
 
         body = yaml.safe_dump(
             data,
@@ -151,9 +147,9 @@ class SkillCurator:
             default_flow_style=False,
             width=120,
         )
-        payload = _LIBRARY_HEADER + "\n" + body
+        payload = _RUNTIME_HEADER + body
 
-        path = self.library_path
+        path = self.runtime_stats_path
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_name = tempfile.mkstemp(
             prefix=path.stem + ".", suffix=".tmp", dir=str(path.parent)
@@ -165,7 +161,6 @@ class SkillCurator:
                 try:
                     os.fsync(f.fileno())
                 except OSError:
-                    # Some filesystems don't support fsync on Windows; not fatal.
                     pass
             os.replace(tmp_name, path)
         except Exception:

@@ -19,7 +19,7 @@ from src.agents.supervisor import run_supervisor_stream
 from src.graph.state import Critique
 from src.llm.mock_provider import MockProvider
 from src.main import persist_run, run_pipeline
-from src.skills.mcp_client import list_skills, read_skill
+from src.skills.mcp_client import list_skills, read_skill_md
 from src.storage import HistoryStore
 
 
@@ -445,40 +445,56 @@ def _render_skill_library_sidebar() -> None:
         st.sidebar.error(f"Failed to load library: {e}")
         return
 
-    st.sidebar.caption(f"{len(skills)} active skill(s) · read-only")
+    st.sidebar.caption(
+        f"{len(skills)} active skill(s) · SKILL.md spec · read-only"
+    )
 
     for s in skills:
+        name = s.get("name") or s.get("id")
         usage = int(s.get("usage_count", 0) or 0)
-        header_label = f"{s['id']}  ·  used {usage}×"
+        header_label = f"{name}  ·  used {usage}×"
         with st.sidebar.expander(header_label, expanded=False):
-            st.markdown(f"**{s['name']}**")
             st.caption(
                 f"injected_into: {', '.join(s.get('injected_into', [])) or '—'}"
-                f"  ·  conf {s.get('confidence', 0):.2f}"
+                f"  ·  v{s.get('version', '1.0')}"
+                f"  ·  by {s.get('created_by', '?')}"
                 f"  ·  used {usage}×"
             )
             st.write(s.get("description", ""))
 
-            # Click to load the full fragment body on demand (cheap — 6 skills).
-            if st.button("Show fragment", key=f"skill_body_{s['id']}"):
-                st.session_state[f"skill_body_open_{s['id']}"] = True
-            if st.session_state.get(f"skill_body_open_{s['id']}"):
+            # On-demand: load and render the raw SKILL.md (frontmatter + body).
+            if st.button("Show SKILL.md", key=f"skill_body_{name}"):
+                st.session_state[f"skill_body_open_{name}"] = True
+            if st.session_state.get(f"skill_body_open_{name}"):
                 try:
-                    full = read_skill(s["id"])
-                    body = full.get("prompt_fragment_content") or "_(empty fragment)_"
+                    raw = read_skill_md(name)
+                    # Strip frontmatter for prettier in-app rendering; keep
+                    # the body's markdown structure intact.
+                    body = raw
+                    if raw.startswith("---"):
+                        parts = raw.split("---", 2)
+                        if len(parts) == 3:
+                            body = parts[2].lstrip("\n")
                     st.markdown(body)
                 except Exception as e:  # pragma: no cover
                     st.error(str(e))
 
-            # Curator actions — Day 8 wiring placeholders.
+            # Curator actions — Day 9 wiring placeholders.
             col_a, col_b = st.columns(2)
-            col_a.button("📌 Pin", key=f"pin_{s['id']}", disabled=True)
-            col_b.button("🗑 Deprecate", key=f"dep_{s['id']}", disabled=True)
+            col_a.button("📌 Pin", key=f"pin_{name}", disabled=True)
+            col_b.button("🗑 Deprecate", key=f"dep_{name}", disabled=True)
 
 
 def main() -> None:
     st.set_page_config(page_title="PRD Stress Test", layout="wide")
     st.title("PRD Stress Test")
+    st.markdown(
+        "<span style='background:#0a3d62;color:#cfe9ff;padding:3px 10px;"
+        "border-radius:12px;font-size:0.78em;border:1px solid #0a3d62;'>"
+        "🏷️ Anthropic Agent Skills v1.0 compliant"
+        "</span>",
+        unsafe_allow_html=True,
+    )
 
     _render_run_history_sidebar()
     _render_skill_library_sidebar()

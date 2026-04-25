@@ -1,18 +1,20 @@
 """Skill Library — reusable review heuristics shared across critics.
 
+Conforms to the Anthropic Agent Skills SKILL.md spec (Dec 2025).
+
 Public surface:
-  - Skill, SkillLibrary         (src/skills/schema.py)
-  - SkillRetriever              (src/skills/retriever.py)
-  - default_retriever()         (module-level singleton)
-  - format_skills_block(skills) (render to `<retrieved_skills>` XML)
+  - Skill, SkillDefinition, SkillRuntimeStats, SkillLibrary  (schema.py)
+  - SkillRetriever, default_retriever, format_skills_block   (retriever.py)
 """
 
 from .retriever import SkillRetriever, default_retriever, format_skills_block
-from .schema import Skill, SkillLibrary
+from .schema import Skill, SkillDefinition, SkillLibrary, SkillRuntimeStats
 
 __all__ = [
     "Skill",
+    "SkillDefinition",
     "SkillLibrary",
+    "SkillRuntimeStats",
     "SkillRetriever",
     "default_retriever",
     "format_skills_block",

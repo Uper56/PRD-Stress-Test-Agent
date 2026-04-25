@@ -1,26 +1,32 @@
 """Read-only MCP server exposing the Skill Library.
 
-Three tools are registered via FastMCP:
+Conforms to the Anthropic Agent Skills SKILL.md spec — every skill is a
+folder under `src/skills/seed/` or `src/skills/learned/` with one
+`SKILL.md` (frontmatter + body) and shared runtime stats in
+`runtime_stats.yaml`.
+
+Tools exposed via FastMCP:
   - list_skills(status="active")
-  - read_skill(skill_id)
+  - read_skill(skill_name)              # parsed skill object
+  - read_skill_md(skill_name)           # raw SKILL.md text
   - search_skills(query, critic_id=None, top_k=3)
 
 Run with stdio transport:
 
     python -m src.mcp_servers.skill_server
 
-Or point an MCP client at this command in its `.mcp.json` / config. The
-server reads `src/skills/library.yaml` and the fragments directory at
-startup; restart the server to pick up library edits.
+Or point an MCP client at this command in its `.mcp.json` / config.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from ..skills import SkillRetriever
+from ..skills.retriever import SKILL_FILENAME
 
 
 # Instantiate once at import time so cold starts pay the YAML-load cost
@@ -58,16 +64,32 @@ def list_skills(status: str = "active") -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def read_skill(skill_id: str) -> dict[str, Any]:
-    """Return a single skill including its full `prompt_fragment_content`.
+def read_skill(skill_name: str) -> dict[str, Any]:
+    """Return a single skill including its full Markdown body.
 
-    Raises `ValueError` if the id is not in the library.
+    Raises `ValueError` if the name is not in the library.
     """
     lib = _retriever.load_library()
-    skill = lib.by_id(skill_id)
+    skill = lib.by_id(skill_name)
     if skill is None:
-        raise ValueError(f"Unknown skill_id: {skill_id!r}")
+        raise ValueError(f"Unknown skill: {skill_name!r}")
     return _skill_to_dict(skill, include_body=True)
+
+
+@mcp.tool()
+def read_skill_md(skill_name: str) -> str:
+    """Return the raw `SKILL.md` text (frontmatter + body) verbatim.
+
+    Useful for clients that want to render the canonical Anthropic
+    Agent Skills format unmodified.
+    """
+    lib = _retriever.load_library()
+    skill = lib.by_id(skill_name)
+    if skill is None:
+        raise ValueError(f"Unknown skill: {skill_name!r}")
+    if not skill.folder:
+        raise ValueError(f"Skill {skill_name!r} has no on-disk folder recorded")
+    return (Path(skill.folder) / SKILL_FILENAME).read_text(encoding="utf-8")
 
 
 @mcp.tool()
@@ -81,8 +103,6 @@ def search_skills(
     When `critic_id` is None, searches across all critics. Result is ordered
     by descending keyword hit count (tie-break: confidence).
     """
-    # If no critic_id, temporarily run retrieval once per critic and merge.
-    # Fine for library sizes we'll see in practice (< ~50 skills).
     if critic_id is not None:
         skills = _retriever.retrieve(query, critic_id=critic_id, top_k=top_k)
     else:

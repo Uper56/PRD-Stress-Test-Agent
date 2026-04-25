@@ -193,11 +193,11 @@ def test_skill_hits_and_misses_are_computed(tmp_path: Path) -> None:
     record = store.save(
         _state(
             prd_text="[001] integrate with Stripe API and webhook endpoint",
-            critiques=[_critique("engineering", "skl_001_api_dependency_enumeration")],
+            critiques=[_critique("engineering", "api-dependency-enumeration")],
         )
     )
     assert record is not None
-    assert "skl_001_api_dependency_enumeration" in record.skill_hits
-    assert "skl_001_api_dependency_enumeration" in record.retrieved_skill_ids
+    assert "api-dependency-enumeration" in record.skill_hits
+    assert "api-dependency-enumeration" in record.retrieved_skill_ids
     # No mismatch between hits and misses.
     assert set(record.skill_hits).isdisjoint(record.skill_misses)

@@ -11,7 +11,7 @@ MCP server — not yet implemented.
 
 ---
 
-## 2. Progress — Days 1 through 8
+## 2. Progress — Days 1 through 8.5
 
 ### Day 1 — Scaffold
 - Repo skeleton, empty package tree, `.env.example`, `.gitignore`.
@@ -239,6 +239,83 @@ Original Day 8 → new Day 9. Original Day 9 → new Day 10.
 two `time.sleep(1.1)` calls in the history-store ordering tests — they need
 distinct seconds-precision timestamps).
 
+### Day 8.5 — Migrate to Anthropic Agent Skills `SKILL.md` spec
+**Why now**: The Day 7 layout (`library.yaml` + `fragments/*.md`) was the
+2024 way. Anthropic shipped the **Agent Skills `SKILL.md` spec** in
+December 2025 — folder-per-skill, frontmatter + Markdown body, telemetry
+decoupled — and OpenAI Codex CLI adopted the same shape. Migrating now
+means the Day 9 Distiller writes spec-compliant skills from day one,
+nothing is grandfathered in.
+
+- **Format**: each skill is `src/skills/seed/<kebab-name>/SKILL.md`
+  (or `src/skills/learned/<kebab-name>/SKILL.md` for distiller output).
+  YAML frontmatter holds `name` / `description` / `version` /
+  `created_by` / `injected_into` (+ optional `trigger_keywords` /
+  `trigger_semantic` / `confidence`); Markdown body holds the prompt
+  fragment. See `docs/skill_format.md` for the full spec mapping.
+- **Telemetry decoupling**: `src/skills/runtime_stats.yaml` is the
+  ONLY file touched by `SkillCurator` between PRD runs. Each skill's
+  `SKILL.md` stays diff-clean across hundreds of runs — PR review of
+  skill content is no longer drowned by `usage_count` churn.
+- **Schema split** (`src/skills/schema.py`):
+  * `SkillDefinition` — frontmatter + body (design-time)
+  * `SkillRuntimeStats` — usage_count / acceptance_rate / status
+    (runtime, keyed by name in `runtime_stats.yaml`)
+  * `Skill` — flat merged view returned by the retriever; preserves
+    the legacy `id` field (= `name`) so historical `RunRecord`
+    payloads with `retrieved_skill_ids` keep their semantics.
+- **Retriever**: scans `seed/` and `learned/` for SKILL.md folders,
+  parses frontmatter via a homegrown 30-line parser (no
+  `python-frontmatter` dependency), merges `runtime_stats.yaml` at
+  load time. Public surface (`retrieve` / `format_skills_block` /
+  `default_retriever`) is unchanged — critic code untouched.
+- **Curator**: `increment_usage` now mutates `runtime_stats.yaml`,
+  also stamps `last_used` (ISO 8601 UTC). Atomic write helper reused.
+- **MCP server / client**: `list_skills`, `read_skill`, `search_skills`
+  return the new shape. **New tool `read_skill_md(skill_name)`**
+  returns the raw `SKILL.md` text verbatim — same bytes any
+  spec-compliant consumer (Anthropic, Codex CLI) would see.
+- **Streamlit**:
+  * Top-of-page badge: 🏷️ Anthropic Agent Skills v1.0 compliant.
+  * Sidebar shows skill `name`, version, created_by, usage count,
+    description (frontmatter `description`), and a "Show SKILL.md"
+    button that renders the body.
+- **Tests** (8 new, 18 updated):
+  * `tests/test_skill_md_format.py` (7) — parametrized over every
+    SKILL.md on disk; validates kebab-case name = folder name,
+    required frontmatter fields, allowed `created_by` values,
+    `injected_into` non-empty + only known critic ids, body non-empty.
+  * `tests/test_skill_retriever.py` rewritten to assert kebab-case
+    names; new test for `read_skill_md` round-tripping the raw file.
+  * `tests/test_skill_curator.py` rewritten against the new
+    `runtime_stats.yaml` schema (header preservation, key order,
+    `last_used` stamping, dedup, unknown-name no-op).
+  * `tests/test_history_store.py` updated: skill name in the telemetry
+    test is now `api-dependency-enumeration`.
+- **Archive**: pre-Day-8.5 layout sits under `src/skills/_archive/`
+  (`library.yaml` + `fragments/`) for one-commit rollback safety.
+  Not loaded by the runtime. Delete after a few days of no regression.
+- **New doc**: `docs/skill_format.md` — interview-ready explainer of
+  why we switched, what the spec requires, how our extensions map,
+  and how to author a new skill.
+
+**Test suite: 61 tests, 0 warnings.**
+
+#### Standards compliance
+
+- Each skill is one folder containing one `SKILL.md` with YAML
+  frontmatter (`---` … `---`) followed by a Markdown body. ✅
+- Required frontmatter fields (`name`, `description`, `version`) are
+  present on all 6 seed skills and validated by
+  `tests/test_skill_md_format.py`. ✅
+- Project-specific extensions (`injected_into`, `trigger_keywords`,
+  `confidence`) coexist with the spec fields without breaking
+  spec-only consumers. ✅
+- Runtime telemetry is decoupled in `runtime_stats.yaml` so the
+  on-disk skill content is identical across runs. ✅
+- An MCP tool (`read_skill_md`) returns the raw spec-compliant file
+  bytes for any client that wants to render the canonical format. ✅
+
 ---
 
 ## 3. Tech stack and key file paths
@@ -265,8 +342,10 @@ distinct seconds-precision timestamps).
 | Streamlit app                    | `src/ui/streamlit_app.py`                             |
 | Golden PRDs + manifest           | `src/eval/golden_prds/` (5 `.md` + `manifest.yaml`)   |
 | Rubric stubs                     | `src/eval/rubric.py`                                  |
-| Skill Library schema + retriever | `src/skills/{schema,retriever}.py`                    |
-| Skill library data               | `src/skills/library.yaml` + `src/skills/fragments/*.md` |
+| Skill Library schema + retriever | `src/skills/{schema,retriever,curator}.py`            |
+| Skill library data (SKILL.md spec) | `src/skills/seed/<name>/SKILL.md` + `src/skills/learned/<name>/SKILL.md` |
+| Skill runtime telemetry          | `src/skills/runtime_stats.yaml`                       |
+| Skill format docs                | `docs/skill_format.md`                                |
 | MCP server (read-only)           | `src/mcp_servers/skill_server.py` + `README.md`       |
 | MCP in-process client mirror     | `src/skills/mcp_client.py`                            |
 | Critique dialog (HITL)           | `src/agents/critique_dialog.py`                       |
@@ -355,6 +434,7 @@ so they don't silently rot.
 | D-06 | Dialog module works only against MockProvider flavour text; it does NOT grow the reply based on the PM's question. Fine for demo, won't pass real eval. | Day 8 OpenAI wiring. | `src/llm/mock_provider.py` |
 | D-07 | Supervisor prompt has no token-budget guard. | Before first OpenAI call. | `src/agents/supervisor.py` |
 | D-08 | Streamlit UI is functional but unstyled — card borders, sticky header, dark-mode verification. | Rolled as Day 8 stretch. | `src/ui/streamlit_app.py` |
+| D-09 | Day 9 Distiller MUST write skills as **complete spec-compliant SKILL.md folders** under `src/skills/learned/<name>/`, with full YAML frontmatter (`name`, `description`, `version`, `created_by: distiller`, `injected_into`, plus retrieval extensions) and a non-empty Markdown body. Distiller output that fails `tests/test_skill_md_format.py` MUST be rejected before disk write. | Day 9. | `src/agents/distiller.py` (new) |
 
 **Note on MCP server:** Day 7 shipped a *real* FastMCP stdio server, not the
 fallback `mcp_client.py`-only path. Both surfaces exist and share the same
@@ -448,16 +528,19 @@ evidence-gated; if we let it propose from a single run we recreate the
 ```
 pip install -e .                              # package installs
 pip install -r requirements.txt               # includes mcp>=1.0
-pytest tests/ -W error                        # 53 pass, 0 warnings
+pytest tests/ -W error                        # 61 pass, 0 warnings
 python -m src.mcp_servers.skill_server        # stdio server starts; Ctrl-C to exit
 streamlit run src/ui/streamlit_app.py
+  → Top-of-page badge: 🏷️ Anthropic Agent Skills v1.0 compliant
   → Sidebar "📊 Run History" panel shows runs (empty on first launch — run once)
-  → Sidebar "📚 Skill Library" shows 6 active skills, each tagged "used N×"
+  → Sidebar "📚 Skill Library" shows 6 active kebab-named skills, each tagged "used N×"
+  → "Show SKILL.md" button renders the full Markdown body
   → Pick a golden PRD → Run
   → After the run, data/results/history/run_<ts>_<id8>.json appears
   → data/results/history/index.jsonl gains a new line
   → Run History panel refreshes (rerun the app) and lists the new run
-  → Skill Library counts increment for whichever skills the retriever fired
+  → src/skills/runtime_stats.yaml: matching skills' usage_count incremented + last_used stamped
+  → src/skills/seed/*/SKILL.md is UNCHANGED (telemetry decoupling working)
   → Every critique card carries a "💡 Triggered by skl_xxx" chip
   → "💬 Discuss" buttons still work (Day 6 regression)
   → Cross-Challenge + Supervisor sections unchanged (Day 5/4 regression)

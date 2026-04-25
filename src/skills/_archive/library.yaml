@@ -28,7 +28,7 @@ skills:
   - engineering
   prompt_fragment_path: fragments/skl_001_api_dependency_enumeration.md
   confidence: 0.85
-  usage_count: 0
+  usage_count: 1
   acceptance_rate: null
   created_at: '2026-04-24'
   created_by: seed
@@ -55,7 +55,7 @@ skills:
   - business
   prompt_fragment_path: fragments/skl_002_quantified_metrics.md
   confidence: 0.9
-  usage_count: 0
+  usage_count: 2
   acceptance_rate: null
   created_at: '2026-04-24'
   created_by: seed
@@ -80,7 +80,7 @@ skills:
   - engineering
   prompt_fragment_path: fragments/skl_003_phased_rollout.md
   confidence: 0.82
-  usage_count: 0
+  usage_count: 2
   acceptance_rate: null
   created_at: '2026-04-24'
   created_by: seed
@@ -108,7 +108,7 @@ skills:
   - design
   prompt_fragment_path: fragments/skl_004_accessibility_check.md
   confidence: 0.78
-  usage_count: 0
+  usage_count: 1
   acceptance_rate: null
   created_at: '2026-04-24'
   created_by: seed
@@ -134,7 +134,7 @@ skills:
   - user_advocate
   prompt_fragment_path: fragments/skl_005_user_evidence.md
   confidence: 0.87
-  usage_count: 0
+  usage_count: 1
   acceptance_rate: null
   created_at: '2026-04-24'
   created_by: seed
@@ -163,7 +163,7 @@ skills:
   - design
   prompt_fragment_path: fragments/skl_006_internal_contradiction.md
   confidence: 0.8
-  usage_count: 0
+  usage_count: 1
   acceptance_rate: null
   created_at: '2026-04-24'
   created_by: seed
