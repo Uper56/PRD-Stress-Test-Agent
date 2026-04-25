@@ -11,7 +11,7 @@ MCP server — not yet implemented.
 
 ---
 
-## 2. Progress — Days 1 through 7
+## 2. Progress — Days 1 through 8
 
 ### Day 1 — Scaffold
 - Repo skeleton, empty package tree, `.env.example`, `.gitignore`.
@@ -169,7 +169,75 @@ MCP server — not yet implemented.
   keywords are absent, MCP client list/read/search (including unknown-id
   raises, filtered vs unfiltered search).
 
-**Test suite: 35 tests, 0 warnings, runs in <0.6s.**
+### Day 8 — Telemetry persistence + skill usage tracking
+**Plan change**: original Day 8 was Distiller + Curator, but Distiller depends
+on cross-PRD pattern detection which requires run history. Pulled forward
+the original D-05 (telemetry persistence) so Distiller has data to consume.
+Original Day 8 → new Day 9. Original Day 9 → new Day 10.
+
+- **Run history** (`src/storage/`):
+  * `history_store.py:RunRecord` — Pydantic model: `run_id`, ISO timestamp,
+    optional `prd_filename`, sha256 `prd_text_hash`, 500-char excerpt,
+    serialized critiques + challenges + supervisor_verdict,
+    `retrieved_skill_ids` / `skill_hits` / `skill_misses`, plus token /
+    cost slots wired but mock-fed.
+  * `HistoryStore.save(state, prd_filename=None)` — atomic JSON write
+    (`tempfile → os.replace`). Per-run file under
+    `data/results/history/run_<YYYYMMDD_HHMMSS>_<id8>.json`. One-line
+    summary appended to `index.jsonl` (no excerpt, no full critiques —
+    keeps the index small forever).
+  * `list_recent(n)` reads the index only, sorts newest-first, hydrates
+    each run lazily from its JSON.
+  * `query(only_misses=True, since=...)` — Day 9 distiller's input; filters
+    runs containing at least one critique with `skill_id is None`.
+  * Skill telemetry (`retrieved_skill_ids` etc.) is recomputed at save
+    time by re-running the retriever per critic — avoids threading a new
+    list reducer through the graph.
+  * All disk failures are caught and logged, not raised. Pipeline never
+    breaks because telemetry broke.
+- **Skill usage write-back** (`src/skills/curator.py`):
+  * `SkillCurator.increment_usage(ids)` — dedups within a single call,
+    bumps `usage_count` for matching skills, atomic-writes `library.yaml`,
+    busts the retriever's in-memory cache so the sidebar reflects the
+    new counts on the next read.
+  * Persistence uses PyYAML (no new dependency). Inline comments on
+    individual entries are not preserved; the file's leading header
+    block IS preserved by re-prepending a hardcoded canonical header on
+    every write. Each skill's keys are reordered to a canonical sequence
+    so diffs stay tight.
+  * `update_acceptance` and `deprecate` are stubs — they raise
+    `NotImplementedError` with a Day 9 message. Importable today;
+    callable Day 9.
+- **Pipeline integration** (`src/main.py`):
+  * `run_pipeline(..., persist=None, prd_filename=None)`. When
+    `include_supervisor=True` and `persist` is unset, defaults to writing
+    history + bumping usage. When `include_supervisor=False`, auto-persist
+    is skipped because the verdict isn't part of the merged state yet —
+    the caller (Streamlit two-phase) is expected to call
+    `persist_run(state)` itself after streaming the verdict.
+  * `PRD_PIPELINE_PERSIST=0` env var (set by `tests/conftest.py`) keeps
+    the suite hermetic.
+- **Streamlit sidebar**:
+  * `📊 Run History` panel above the Skill Library — shows the 20 most
+    recent runs, each expander surfaces P0/P1/P2 counts, executive
+    summary, full grouped verdict, and a nested critique-detail expander
+    with per-critique skill chip.
+  * Each Skill Library expander now displays `used N×` next to the id
+    and again inside the body, so you can see usage growth between runs.
+- **Tests** (18 new):
+  * `tests/test_history_store.py` (10): round-trip save/load,
+    newest-first ordering, n-cap, empty-history baseline, index.jsonl
+    summary shape (no full bodies), `query(only_misses)` filtering,
+    `query(since)` filtering, atomic-write rollback on simulated crash,
+    save-failure-returns-None contract, skill hits/misses computation.
+  * `tests/test_skill_curator.py` (8): single-id increment, multi-id
+    independence, dedup-within-call, unknown-id no-op, empty-input no-op,
+    canonical header preserved on rewrite, key order preserved,
+    Day-9 stubs raise `NotImplementedError`.
+
+**Test suite: 53 tests, 0 warnings, runs in <5.5s** (the extra time is from
+two `time.sleep(1.1)` calls in the history-store ordering tests — they need
+distinct seconds-precision timestamps).
 
 ---
 
@@ -281,9 +349,9 @@ so they don't silently rot.
 | - | ---- | ----------- | ---------- |
 | D-01 | `CONVERGENCE_SIMILARITY_THRESHOLD = 0.75` is a `difflib.SequenceMatcher` heuristic, not semantic similarity. | Day 10 (embeddings). | `src/graph/edges.py` |
 | D-02 | Skill retriever is keyword-based only. No synonyms, no embeddings, no learned weights. Confidence field is authored, never updated. | Day 10. | `src/skills/retriever.py` |
-| D-03 | Skill Library is read-only. Distiller / curator / pin / deprecate write tools not yet built (UI buttons exist but disabled). | Day 8. | `src/skills/`, Streamlit sidebar |
+| D-03 | Skill Library is read-only for skill *content*. Distiller / curator UI / pin / deprecate write tools not yet built (UI buttons exist but disabled). `usage_count` write-back shipped Day 8. | Day 9. | `src/skills/`, Streamlit sidebar |
 | D-04 | `SupervisorVerdict` schema is loose — parse failures fall back to a placeholder dict merged with whatever keys were parseable. | Day 9 eval harness. | `src/agents/supervisor.py` |
-| D-05 | No CrossChallenge / critique / skill-hit telemetry persisted to `data/results/`. | Day 9. | — |
+| D-05 | ~~No CrossChallenge / critique / skill-hit telemetry persisted to `data/results/`.~~ **RESOLVED Day 8** — `HistoryStore` writes per-run JSON + `index.jsonl` summary; skill hits/misses recomputed at save time. | Day 8. ✅ | `src/storage/history_store.py` |
 | D-06 | Dialog module works only against MockProvider flavour text; it does NOT grow the reply based on the PM's question. Fine for demo, won't pass real eval. | Day 8 OpenAI wiring. | `src/llm/mock_provider.py` |
 | D-07 | Supervisor prompt has no token-budget guard. | Before first OpenAI call. | `src/agents/supervisor.py` |
 | D-08 | Streamlit UI is functional but unstyled — card borders, sticky header, dark-mode verification. | Rolled as Day 8 stretch. | `src/ui/streamlit_app.py` |
@@ -296,65 +364,103 @@ this table with a "revert by Day 10" gate.
 
 ---
 
-## 7. Next — Day 8: Skill Distiller + Curator (write path)
+## 7. Next — Day 9: Skill Distiller + Curator (write path)
 
-Day 7 shipped the read path. Day 8 adds the write path: a Distiller agent
-that proposes new skills after a run, a Curator UI that lets a human
-accept / deprecate / pin them, and the supporting MCP write tools.
+Day 7 shipped the read path. Day 8 added run-history telemetry. Day 9 adds
+the *content* write path: a Distiller agent that proposes new skills after a
+run, a Curator UI that lets a human accept / deprecate / pin them, and the
+supporting MCP write tools. Critically, the Distiller now has real history
+data to consume, so admission can be evidence-gated rather than vibes-based.
 
-### 8a. Distiller agent
+### 9a. Distiller agent
 
-- `src/agents/distiller.py:run_distiller(state, llm) -> list[Skill]`.
-  Input: the full post-supervisor `GraphState` (critiques + challenges +
-  verdict + PRD text). Output: 0–3 candidate skills phrased as
+- `src/agents/distiller.py:run_distiller(state, history, llm) -> list[Skill]`.
+  Input: the full post-supervisor `GraphState` for the *current* run, plus
+  recent history records. Output: 0–3 candidate skills phrased as
   `Skill(status="proposed", created_by="distiller", learned_from_prds=[...])`.
-- Trigger heuristic: only propose a new skill when a critique carries
-  `skill_id=None` AND the finding's pattern repeats across critiques /
-  across PRDs (check `data/results/` history once it exists).
 - Prompt shape mirrors the fragment .md skeleton so the agent's output can
   be written straight to disk if accepted.
 
-### 8b. Curator UI + write tools
+### Day 9 Distiller 设计要点 (hard rules — do not relax)
+
+These came out of the Day 8 review and are non-negotiable. The point of
+adding history persistence first is precisely so the Distiller can be
+evidence-gated; if we let it propose from a single run we recreate the
+"founder-fiction skill" failure mode the system is supposed to detect.
+
+1. **Input must include `HistoryStore.query(only_misses=True)` over the
+   recent N records** (default N=20). The current run alone is insufficient
+   evidence — the agent must see prior PRDs where some critique fired with
+   `skill_id=None`, i.e. unattributed findings the existing library failed
+   to cover.
+2. **Admission threshold: same finding pattern in ≥3 different PRDs.**
+   A pattern observed in fewer than 3 distinct `run_id`s is not yet a
+   reusable heuristic, and the Distiller must NOT propose a skill for it.
+   Implemented as a pre-filter on the agent's input (group misses by
+   pattern signature first, hand the agent only ≥3-PRD clusters), AND
+   re-checked in code post-output (defensive — drop any proposal whose
+   evidence list spans <3 distinct run_ids).
+3. **Output must include `evidence: list[{run_id, critique_ref}]`.** Every
+   proposed skill carries a literal pointer back to the misses that
+   justified it. The Curator UI surfaces this so the human reviewer can
+   click through to the source critiques before accepting. No evidence
+   field → automatic reject (handled in code, not just prompt).
+4. **Reject if no evidence.** Belt-and-braces with rule 3: if the agent
+   returns a proposal whose `evidence` is empty / malformed / references
+   run_ids not in `HistoryStore`, drop it silently and log a warning.
+   Never surface unevidenced proposals to the human — that re-introduces
+   founder-fiction one layer up.
+
+### 9b. Curator UI + write tools
 
 - `src/skills/writer.py`: `accept_skill(draft) → Skill`, `deprecate_skill(id)`,
   `pin_skill(id)`. Acceptance writes to `library.yaml` + `fragments/*.md`
-  atomically (temp-file + rename); deprecate flips `status`.
+  atomically (temp-file + rename); deprecate flips `status`. Build on the
+  same atomic-write helpers `SkillCurator` already uses.
+- `SkillCurator.update_acceptance` and `SkillCurator.deprecate` (the Day 8
+  stubs raising `NotImplementedError`) get filled in here.
 - New MCP tools on `skill_server`: `propose_skill`, `accept_skill`,
   `deprecate_skill`. Every write goes through a human-in-the-loop gate —
   the server's `accept_skill` will refuse unless the caller passes an
   `approved_by` token set in the Streamlit UI.
 - Enable the `📌 Pin` / `🗑 Deprecate` buttons in the sidebar (currently
   disabled placeholders). Wire a "Proposed skills" section that shows the
-  distiller's output after each run with Accept / Reject buttons.
+  distiller's output after each run with Accept / Reject buttons, and
+  surfaces the evidence list as clickable run_id chips that jump to the
+  Run History panel.
 
-### 8c. OpenAI wiring (parallel track if the key arrives)
+### 9c. OpenAI wiring (parallel track if the key arrives)
 
 - `src/llm/openai_provider.py` implementing `complete` + `stream` with
   chunks shaped as `{"type":"text","delta":str}`.
 - Flip `src/config.py` branches, set `LLM_PROVIDER=openai` in `.env`.
 - Add token-budget guard on supervisor prompt (debt D-07).
 
-### Out of scope for Day 8
+### Out of scope for Day 9
 
-- Eval harness (Day 9), persistence to `data/results/` (Day 9),
-  embedding-based similarity (Day 10), frontend polish (stretch any day).
+- Eval harness / ablation (Day 10), embedding-based similarity (Day 10),
+  frontend polish (stretch any day).
 
 ---
 
-## Quick sanity checklist before starting Day 8
+## Quick sanity checklist before starting Day 9
 
 ```
 pip install -e .                              # package installs
 pip install -r requirements.txt               # includes mcp>=1.0
-pytest tests/ -W error                        # 35 pass, 0 warnings
+pytest tests/ -W error                        # 53 pass, 0 warnings
 python -m src.mcp_servers.skill_server        # stdio server starts; Ctrl-C to exit
 streamlit run src/ui/streamlit_app.py
-  → Sidebar "📚 Skill Library" shows 6 active skills
-  → Each has an expander; "Show fragment" renders the full .md
+  → Sidebar "📊 Run History" panel shows runs (empty on first launch — run once)
+  → Sidebar "📚 Skill Library" shows 6 active skills, each tagged "used N×"
   → Pick a golden PRD → Run
+  → After the run, data/results/history/run_<ts>_<id8>.json appears
+  → data/results/history/index.jsonl gains a new line
+  → Run History panel refreshes (rerun the app) and lists the new run
+  → Skill Library counts increment for whichever skills the retriever fired
   → Every critique card carries a "💡 Triggered by skl_xxx" chip
   → "💬 Discuss" buttons still work (Day 6 regression)
   → Cross-Challenge + Supervisor sections unchanged (Day 5/4 regression)
 ```
 
-If any step above fails, do NOT start Day 8 — fix the regression first.
+If any step above fails, do NOT start Day 9 — fix the regression first.

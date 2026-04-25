@@ -11,3 +11,6 @@ between deltas, which is irrelevant during pytest.
 import os
 
 os.environ.setdefault("MOCK_STREAM_DELAY", "0")
+# Day 8: existing tests don't expect run history or skill-usage side effects.
+# `src/main.py:run_pipeline` reads this env var as the default for `persist`.
+os.environ.setdefault("PRD_PIPELINE_PERSIST", "0")

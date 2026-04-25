@@ -18,8 +18,9 @@ from src.agents.critique_dialog import MAX_DIALOG_ROUNDS, run_critique_dialog
 from src.agents.supervisor import run_supervisor_stream
 from src.graph.state import Critique
 from src.llm.mock_provider import MockProvider
-from src.main import run_pipeline
+from src.main import persist_run, run_pipeline
 from src.skills.mcp_client import list_skills, read_skill
+from src.storage import HistoryStore
 
 
 GOLDEN_DIR = Path(__file__).resolve().parents[1] / "eval" / "golden_prds"
@@ -262,7 +263,7 @@ def _stream_supervisor_sync(state: dict, llm, thinking_box) -> tuple[str, dict]:
     return thinking_text, final_verdict
 
 
-def _run_and_cache(prd_text: str) -> None:
+def _run_and_cache(prd_text: str, *, prd_filename: str | None = None) -> None:
     """Run the pipeline once and stash everything we need for later reruns.
 
     Streamlit re-executes the script top-to-bottom on every widget interaction
@@ -290,6 +291,15 @@ def _run_and_cache(prd_text: str) -> None:
     thinking_text, verdict = _stream_supervisor_sync(
         dict(state), llm, thinking_placeholder
     )
+
+    # Persist now that we have the full picture (critics + challenges + verdict).
+    # `run_pipeline` skipped auto-persist because we used include_supervisor=False.
+    final_state = dict(state)
+    final_state["final_report"] = verdict
+    try:
+        persist_run(final_state, prd_filename=prd_filename)
+    except Exception as e:  # pragma: no cover — defensive
+        st.warning(f"Run history not saved: {e}")
 
     st.session_state["run"] = {
         "prd_text": state.get("prd_text", prd_text),
@@ -371,6 +381,56 @@ def _render_run(run: dict) -> None:
     _render_verdict(run.get("verdict") or {})
 
 
+def _render_run_history_sidebar() -> None:
+    """List the most recent runs persisted to `data/results/history/`."""
+    st.sidebar.header("📊 Run History")
+    try:
+        runs = HistoryStore().list_recent(n=20)
+    except Exception as e:  # pragma: no cover
+        st.sidebar.error(f"Failed to load history: {e}")
+        return
+
+    if not runs:
+        st.sidebar.caption("No runs yet — kick one off to populate.")
+        return
+
+    st.sidebar.caption(f"{len(runs)} most-recent run(s)")
+    for r in runs:
+        verdict = r.supervisor_verdict or {}
+        p0 = len(verdict.get("p0_blockers", []) or [])
+        p1 = len(verdict.get("p1_concerns", []) or [])
+        p2 = len(verdict.get("p2_suggestions", []) or [])
+        title = (
+            f"{r.timestamp[:19].replace('T',' ')} · "
+            f"{r.prd_filename or 'custom input'}"
+        )
+        with st.sidebar.expander(title, expanded=False):
+            st.caption(
+                f"P0 {p0} · P1 {p1} · P2 {p2}  ·  critiques {len(r.critiques)}"
+                f"  ·  hits {len(r.skill_hits)} · misses {len(r.skill_misses)}"
+            )
+            if verdict.get("executive_summary"):
+                st.markdown(f"**Summary** — {verdict['executive_summary']}")
+            for label, key in (("P0", "p0_blockers"), ("P1", "p1_concerns"), ("P2", "p2_suggestions")):
+                items = verdict.get(key, []) or []
+                if items:
+                    st.markdown(f"_{label}_")
+                    for item in items:
+                        st.markdown(f"- {item}")
+            if r.critiques:
+                with st.expander("Critique details", expanded=False):
+                    for c in r.critiques:
+                        st.markdown(
+                            f"**{c.get('critic_id','?')}** [{c.get('severity','?')}] "
+                            f"{c.get('finding','')}"
+                            + (
+                                f"  · 💡 `{c['skill_id']}`"
+                                if c.get("skill_id")
+                                else ""
+                            )
+                        )
+
+
 def _render_skill_library_sidebar() -> None:
     """Render the Skill Library panel in the Streamlit sidebar.
 
@@ -388,11 +448,14 @@ def _render_skill_library_sidebar() -> None:
     st.sidebar.caption(f"{len(skills)} active skill(s) · read-only")
 
     for s in skills:
-        with st.sidebar.expander(f"{s['id']}", expanded=False):
+        usage = int(s.get("usage_count", 0) or 0)
+        header_label = f"{s['id']}  ·  used {usage}×"
+        with st.sidebar.expander(header_label, expanded=False):
             st.markdown(f"**{s['name']}**")
             st.caption(
                 f"injected_into: {', '.join(s.get('injected_into', [])) or '—'}"
                 f"  ·  conf {s.get('confidence', 0):.2f}"
+                f"  ·  used {usage}×"
             )
             st.write(s.get("description", ""))
 
@@ -417,6 +480,7 @@ def main() -> None:
     st.set_page_config(page_title="PRD Stress Test", layout="wide")
     st.title("PRD Stress Test")
 
+    _render_run_history_sidebar()
     _render_skill_library_sidebar()
 
     golden = _load_golden_prds()
@@ -429,9 +493,11 @@ def main() -> None:
     )
 
     prd_text = ""
+    prd_filename: str | None = None
     if source == "Pick a golden PRD" and golden:
         choice = st.selectbox("Golden PRD", list(golden.keys()))
         prd_text = golden[choice]
+        prd_filename = choice
         st.expander("Preview").code(prd_text, language="markdown")
     else:
         prd_text = st.text_area("Paste your PRD here", height=300)
@@ -443,7 +509,7 @@ def main() -> None:
             return
         # Clear any stale dialogs from a previous run before caching the new one.
         st.session_state["active_dialogs"] = {}
-        _run_and_cache(prd_text)
+        _run_and_cache(prd_text, prd_filename=prd_filename)
 
     if col_reset.button("Reset"):
         for k in ("run", "active_dialogs", "prd_text", "dialog_llm"):
