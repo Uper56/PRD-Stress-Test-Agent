@@ -686,21 +686,31 @@ def main() -> None:
     golden = _load_golden_prds()
 
     st.subheader("Input")
+    # Stable explicit keys are mandatory: without them Streamlit identifies
+    # widgets by (type, label, script-position). The sidebar grows as
+    # proposals come in, which can shift this widget's position and reset
+    # the radio back to its default ("Paste text") on every Run Distiller
+    # rerun. Explicit keys persist state across reruns regardless of layout.
     source = st.radio(
         "PRD source",
         ["Paste text", "Pick a golden PRD"],
         horizontal=True,
+        key="prd_source_choice",
     )
 
     prd_text = ""
     prd_filename: str | None = None
     if source == "Pick a golden PRD" and golden:
-        choice = st.selectbox("Golden PRD", list(golden.keys()))
+        choice = st.selectbox(
+            "Golden PRD", list(golden.keys()), key="prd_golden_choice"
+        )
         prd_text = golden[choice]
         prd_filename = choice
         st.expander("Preview").code(prd_text, language="markdown")
     else:
-        prd_text = st.text_area("Paste your PRD here", height=300)
+        prd_text = st.text_area(
+            "Paste your PRD here", height=300, key="prd_paste_text"
+        )
 
     col_run, col_reset = st.columns([1, 1])
     if col_run.button("Run Stress Test", type="primary"):
