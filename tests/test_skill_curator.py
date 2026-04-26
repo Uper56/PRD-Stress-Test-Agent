@@ -98,10 +98,12 @@ def test_write_preserves_key_order_per_skill(stats_path: Path) -> None:
     assert i_usage < i_status
 
 
-def test_unimplemented_methods_raise(stats_path: Path) -> None:
-    """Day 9 stubs must announce themselves loudly until wired."""
+def test_manual_deprecate_flips_status_and_stamps_reason(stats_path: Path) -> None:
+    """Day 9: `deprecate` is now wired (no longer NotImplementedError)."""
     c = SkillCurator(stats_path)
-    with pytest.raises(NotImplementedError):
-        c.update_acceptance("skl-a", accepted=True)
-    with pytest.raises(NotImplementedError):
-        c.deprecate("skl-a", reason="obsolete")
+    c.deprecate("skl-a", reason="obsolete")
+    after = _read(stats_path)["skills"]
+    assert after["skl-a"]["status"] == "deprecated"
+    assert after["skl-a"].get("deprecate_reason") == "obsolete"
+    # Untouched neighbour stays active.
+    assert after["skl-b"]["status"] == "active"

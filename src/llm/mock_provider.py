@@ -249,13 +249,148 @@ def _dialog_flavor_for(system_lower: str) -> str:
     return _DIALOG_FLAVOR[critic]
 
 
-def _match(system: str) -> dict | str:
+# ---- Skill distillation canned response (Day 9) ----------------------------
+
+
+# A library of fake distiller proposals, keyed by `critic_id`. The mock picks
+# one based on the cluster the user message advertises, so different critic
+# clusters produce visibly different proposals (helpful for the Streamlit
+# review panel).
+_DISTILLER_PROPOSALS: dict[str, dict] = {
+    "engineering": {
+        "proposed_name": "retry-budget-discipline",
+        "injected_into": ["engineering"],
+        "generalization_score": 0.84,
+        "proposed_skill_md": (
+            "---\n"
+            "name: retry-budget-discipline\n"
+            "description: Use this skill WHENEVER the PRD describes any retry, "
+            "fallback, or queue without naming a per-request retry cap, total "
+            "budget, or backoff schedule. Unbounded retries are how minor "
+            "outages turn into stampedes — the PRD MUST state limits.\n"
+            'version: "1.0"\n'
+            "created_by: distiller\n"
+            "injected_into:\n  - engineering\n"
+            "trigger_keywords: [retry, fallback, queue, backoff, timeout]\n"
+            "trigger_semantic: PRD mentions retries / fallbacks without naming a budget.\n"
+            "confidence: 0.78\n"
+            "---\n\n"
+            "# Skill: Retry Budget Discipline\n\n"
+            "## When to apply\nThe PRD describes any retry, fallback, queue, or backoff without bounds.\n\n"
+            "## Instruction\nVerify per-request retry cap, total retry budget, jitter, and circuit-break threshold.\n\n"
+            "## Rationale\nUnbounded retries amplify dependency outages into stampedes.\n\n"
+            "## Examples of issues this catches\n- 'We will retry on failure' with no max-attempts.\n"
+            "- Background queue with no DLQ.\n"
+            "- Exponential backoff without jitter on a fan-in path.\n"
+        ),
+    },
+    "business": {
+        "proposed_name": "guardrail-metric-required",
+        "injected_into": ["business"],
+        "generalization_score": 0.81,
+        "proposed_skill_md": (
+            "---\n"
+            "name: guardrail-metric-required\n"
+            "description: Use this skill EVERY TIME the PRD names a primary "
+            "success metric. The PRD MUST also name a paired guardrail metric "
+            "that must NOT regress, otherwise the team can hit the target by "
+            "harming an unrelated outcome. Apply firmly to all KPI / OKR claims.\n"
+            'version: "1.0"\n'
+            "created_by: distiller\n"
+            "injected_into:\n  - business\n"
+            "trigger_keywords: [target, kpi, okr, lift, increase, conversion]\n"
+            "trigger_semantic: PRD names a success metric but no paired guardrail.\n"
+            "confidence: 0.75\n"
+            "---\n\n"
+            "# Skill: Guardrail Metric Required\n\n"
+            "## When to apply\nThe PRD names any success metric / KPI / OKR.\n\n"
+            "## Instruction\nVerify a paired guardrail metric is named with a non-regression threshold.\n\n"
+            "## Rationale\nWithout a guardrail, a metric can be hit by harming a paired outcome.\n\n"
+            "## Examples of issues this catches\n- 'Lift conversion 10%' with no NPS / refund-rate guardrail.\n"
+            "- 'Reduce ticket volume' gamed by hiding the help link.\n"
+            "- Engagement uplift paired with retention regression.\n"
+        ),
+    },
+    "user_advocate": {
+        "proposed_name": "user-segment-recency",
+        "injected_into": ["user_advocate"],
+        "generalization_score": 0.79,
+        "proposed_skill_md": (
+            "---\n"
+            "name: user-segment-recency\n"
+            "description: Use this skill ANY TIME the PRD cites user "
+            "evidence (interviews, tickets, analytics) without naming the "
+            "cohort and the recency of the data. Stale evidence from a "
+            "different cohort is weaker than no evidence — flag it.\n"
+            'version: "1.0"\n'
+            "created_by: distiller\n"
+            "injected_into:\n  - user_advocate\n"
+            "trigger_keywords: [interviews, tickets, survey, cohort, analytics]\n"
+            "trigger_semantic: User evidence cited without cohort + recency.\n"
+            "confidence: 0.72\n"
+            "---\n\n"
+            "# Skill: User Segment + Recency\n\n"
+            "## When to apply\nUser evidence is cited without specifying cohort or when it was collected.\n\n"
+            "## Instruction\nVerify cohort name + collection date + sample size.\n\n"
+            "## Rationale\nEvidence from the wrong segment or 18 months stale is misleading.\n\n"
+            "## Examples of issues this catches\n- 'Customers asked for X' with no cohort.\n"
+            "- Tickets from a redesigned-since flow.\n"
+            "- B2B PRD citing B2C survey.\n"
+        ),
+    },
+    "design": {
+        "proposed_name": "non-happy-state-spec",
+        "injected_into": ["design"],
+        "generalization_score": 0.77,
+        "proposed_skill_md": (
+            "---\n"
+            "name: non-happy-state-spec\n"
+            "description: Use this skill ANY TIME the PRD specifies a UI "
+            "flow without explicitly listing empty / loading / error / "
+            "offline states. The non-happy states are where trust is built "
+            "or broken — flag missing specs as P1 minimum.\n"
+            'version: "1.0"\n'
+            "created_by: distiller\n"
+            "injected_into:\n  - design\n"
+            "trigger_keywords: [flow, screen, modal, list, table, error]\n"
+            "trigger_semantic: UI flow specified without enumerated non-happy states.\n"
+            "confidence: 0.74\n"
+            "---\n\n"
+            "# Skill: Non-Happy State Spec\n\n"
+            "## When to apply\nThe PRD specifies a UI flow without listing empty / loading / error / offline states.\n\n"
+            "## Instruction\nFor each surface, verify the four non-happy states are specified.\n\n"
+            "## Rationale\nNon-happy states are where users build or lose trust.\n\n"
+            "## Examples of issues this catches\n- New list with no empty state.\n"
+            "- Submit flow with no error toast spec.\n"
+            "- Mobile view with no offline behavior.\n"
+        ),
+    },
+}
+
+
+def _match_distiller(user: str) -> dict:
+    """Pick a fake proposal based on which critic_id the cluster is from.
+
+    The distiller's user prompt embeds `critic_id="..."` — we sniff for
+    that so different clusters produce visibly different proposals.
+    """
+    for cid in ("engineering", "business", "user_advocate", "design"):
+        if f'critic_id="{cid}"' in user:
+            return _DISTILLER_PROPOSALS[cid]
+    # Fallback: return the first proposal so a malformed cluster still
+    # exercises the validate/persist path.
+    return next(iter(_DISTILLER_PROPOSALS.values()))
+
+
+def _match(system: str, user: str = "") -> dict | str:
     """Pick a canned payload based on keywords in the system prompt.
 
     Returns a dict for JSON-shaped responders and a raw string for supervisor
     (which wraps JSON inside an XML envelope) or dialog mode (plain prose).
     """
     s = system.lower()
+    if "skill distillation" in s:
+        return _match_distiller(user)
     if "supervisor" in s:
         return _SUPERVISOR_TEXT
     # Dialog mode must be checked BEFORE the plain-critic fallback, because
@@ -290,7 +425,7 @@ class MockProvider(LLMProvider):
         max_tokens: int | None = None,
         temperature: float = 0.7,
     ) -> LLMResponse:
-        payload = _match(system)
+        payload = _match(system, user)
         self.call_log.append(
             {
                 "method": "complete",

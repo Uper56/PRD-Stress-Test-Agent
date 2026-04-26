@@ -11,7 +11,7 @@ MCP server — not yet implemented.
 
 ---
 
-## 2. Progress — Days 1 through 8.5
+## 2. Progress — Days 1 through 9
 
 ### Day 1 — Scaffold
 - Repo skeleton, empty package tree, `.env.example`, `.gitignore`.
@@ -301,6 +301,102 @@ nothing is grandfathered in.
 
 **Test suite: 61 tests, 0 warnings.**
 
+### Day 9 — Skill Distiller + Curator advanced + HITL approval loop
+
+The closed loop: **Run PRD → Telemetry → Distiller → Proposal → HITL
+Approve → Skill in `learned/` → Next run uses it → Acceptance feedback →
+Curator updates stats → Auto-deprecate if low quality.**
+
+- **Distiller agent** (`src/agents/skill_distiller.py`):
+  * `run_distiller(llm, history_store, min_pattern_frequency=3,
+    min_runs_required=3)` returns `list[SkillProposal]`. Pulls misses
+    via `HistoryStore.query(only_misses=True)`, clusters by
+    `(critic_id, finding similarity)` using
+    `difflib.SequenceMatcher` ≥0.6 (TODO: upgrade to embeddings —
+    debt D-10), drops clusters spanning <3 distinct PRDs.
+  * For each surviving cluster the LLM is asked for ONE proposal:
+    `proposed_name` (kebab), full `proposed_skill_md` with frontmatter,
+    `injected_into`, `generalization_score`. Evidence (`run_id` +
+    `critique_excerpt`, ≥3 rows) is filled in code, NOT trusted from
+    the LLM.
+  * Belt-and-braces validation: drops proposals if
+    `generalization_score < 0.7`, fewer than 3 evidence rows, evidence
+    missing `run_id`, name not kebab-case, frontmatter
+    missing required fields, `created_by ≠ "distiller"`, frontmatter
+    `name` ≠ `proposed_name`, body empty.
+  * Hard guard at the top: if total history < `min_runs_required`,
+    returns `[]` with a warning. No founder-fiction skills.
+- **SkillProposal schema**: `proposal_id` / `proposed_name` /
+  `proposed_skill_md` / `injected_into` / `generalization_score` /
+  `evidence: list[{run_id, critique_excerpt}]` / `pattern_frequency`
+  (distinct PRDs) / `created_at` / `status` ∈
+  `{pending, approved, rejected, edited}` / `rejection_reason`.
+- **ProposalsStore** (`src/storage/proposals_store.py`):
+  Per-proposal JSON under `data/results/proposals/`. Public methods:
+  `save`, `list_pending`, `list_all`, `load`, `update_status`,
+  `promote_to_skill`. Promotion writes the proposal's
+  `proposed_skill_md` to `src/skills/learned/<name>/SKILL.md` AND
+  seeds a fresh row in `runtime_stats.yaml` (active, usage_count=0,
+  `created_by: distiller`); the in-process retriever cache is busted
+  so the new skill is visible without a restart. All disk failures
+  are absorbed.
+- **SkillCurator upgrades** (`src/skills/curator.py`):
+  * `update_acceptance(name, accepted)` — sliding window of length 20
+    (configurable), serializes the window as JSON in
+    `acceptance_history` so a restart doesn't reset the signal.
+    `acceptance_rate` is recomputed on every sample.
+  * `auto_deprecate()` — flips `status` to `"deprecated"` for any
+    skill with `usage_count ≥ 5` AND `acceptance_rate < 0.30`.
+    Conservative defaults so a bad week doesn't kill a skill.
+    Returns the list of just-deprecated names.
+  * `merge_duplicates(threshold=0.85)` — finds active skills with
+    SequenceMatcher similarity ≥ threshold on
+    `(description, sorted(injected_into))`. Loser of each pair keeps
+    its `SKILL.md` on disk untouched, but its `runtime_stats` row
+    flips to `"deprecated_merged_into_<winner>"`. Reversible by
+    editing one file.
+  * Old `update_acceptance` / `deprecate` `NotImplementedError` stubs
+    are now actually implemented.
+- **MockProvider extension** (`src/llm/mock_provider.py`): when the
+  system prompt contains "skill distillation", returns a critic-keyed
+  fake `SkillProposal` JSON with full SKILL.md text, generalization
+  scores in 0.77–0.84, and three placeholder evidence rows. Different
+  `critic_id` clusters produce visibly different proposals.
+- **Pipeline integration** (`src/main.py`):
+  * New env var `DISABLE_AUTO_DISTILL` (default `"1"` — OFF).
+  * When enabled, after each `run_pipeline` we may invoke the
+    Distiller synchronously: only if ≥5 runs in history AND ≥3 new
+    runs since the last marker (`data/results/.last_auto_distill`).
+    Failure is swallowed — telemetry never breaks the pipeline.
+- **Streamlit upgrades** (`src/ui/streamlit_app.py`):
+  * 🧪 **Skill Distillation** sidebar panel: shows
+    `<runs in history> · <unhit critiques>`, a ▶️ Run Distiller
+    button (loading spinner while the agent runs), and a card per
+    pending proposal with name + generalization-score progress bar
+    (🟢/🟡/🔴 colour code) + folded evidence list + folded full
+    SKILL.md (editable in a `st.text_area`). Buttons:
+    ✅ Approve (writes to `learned/<name>/SKILL.md`),
+    ❌ Reject, ✏️ Save edit. Approve picks up any unsaved edits
+    automatically.
+  * Each critique card now carries ✓ Useful / ✗ Not useful buttons
+    when a `skill_id` is attached. Clicking either calls
+    `SkillCurator.update_acceptance(skill_id, accepted=...)` and
+    locks the row so a single PRD review can't double-vote.
+- **Tests** (16 new):
+  * `tests/test_skill_distiller.py` (9): short-history guard,
+    cluster grouping by critic_id, 4 validation rejections (low
+    score / few evidence / missing run_id / non-kebab name), one
+    happy-path validation, end-to-end promotion writes a
+    spec-compliant SKILL.md the retriever immediately picks up,
+    LLM-failure tolerance.
+  * `tests/test_curator_advanced.py` (7): acceptance_rate sliding
+    window math (single sample + window overflow), unknown-name
+    no-op, auto_deprecate happy-path, two skip cases (below usage
+    floor, no acceptance data), merge_duplicates demotes loser
+    without deleting either SKILL.md file.
+
+**Test suite: 77 tests, 0 warnings, runs in <6s.**
+
 #### Standards compliance
 
 - Each skill is one folder containing one `SKILL.md` with YAML
@@ -346,6 +442,8 @@ nothing is grandfathered in.
 | Skill library data (SKILL.md spec) | `src/skills/seed/<name>/SKILL.md` + `src/skills/learned/<name>/SKILL.md` |
 | Skill runtime telemetry          | `src/skills/runtime_stats.yaml`                       |
 | Skill format docs                | `docs/skill_format.md`                                |
+| Skill Distiller                  | `src/agents/skill_distiller.py`                       |
+| Proposals store (HITL queue)     | `src/storage/proposals_store.py`                      |
 | MCP server (read-only)           | `src/mcp_servers/skill_server.py` + `README.md`       |
 | MCP in-process client mirror     | `src/skills/mcp_client.py`                            |
 | Critique dialog (HITL)           | `src/agents/critique_dialog.py`                       |
@@ -434,7 +532,9 @@ so they don't silently rot.
 | D-06 | Dialog module works only against MockProvider flavour text; it does NOT grow the reply based on the PM's question. Fine for demo, won't pass real eval. | Day 8 OpenAI wiring. | `src/llm/mock_provider.py` |
 | D-07 | Supervisor prompt has no token-budget guard. | Before first OpenAI call. | `src/agents/supervisor.py` |
 | D-08 | Streamlit UI is functional but unstyled — card borders, sticky header, dark-mode verification. | Rolled as Day 8 stretch. | `src/ui/streamlit_app.py` |
-| D-09 | Day 9 Distiller MUST write skills as **complete spec-compliant SKILL.md folders** under `src/skills/learned/<name>/`, with full YAML frontmatter (`name`, `description`, `version`, `created_by: distiller`, `injected_into`, plus retrieval extensions) and a non-empty Markdown body. Distiller output that fails `tests/test_skill_md_format.py` MUST be rejected before disk write. | Day 9. | `src/agents/distiller.py` (new) |
+| D-09 | ~~Day 9 Distiller MUST write spec-compliant SKILL.md folders…~~ **RESOLVED Day 9** — `src/agents/skill_distiller.py:_validate_proposal` rejects malformed proposals before they ever reach disk; `ProposalsStore.promote_to_skill` re-parses on the way out. | Day 9. ✅ | `src/agents/skill_distiller.py` |
+| D-10 | Distiller clustering uses `difflib.SequenceMatcher` ≥ 0.6. Misses obvious near-paraphrases (different vocabulary, same concept). Same upgrade path as D-01/D-02 (sentence-transformers). | Day 10 (embeddings). | `src/agents/skill_distiller.py` |
+| D-11 | Auto-distill is synchronous in `src/main.py:_maybe_auto_distill`. Fine under MockProvider (sub-second); blocks the request under real-API mode. Move to a worker queue or background task before flipping `DISABLE_AUTO_DISTILL=0` against OpenAI. | Before first OpenAI deployment. | `src/main.py` |
 
 **Note on MCP server:** Day 7 shipped a *real* FastMCP stdio server, not the
 fallback `mcp_client.py`-only path. Both surfaces exist and share the same
@@ -444,91 +544,67 @@ this table with a "revert by Day 10" gate.
 
 ---
 
-## 7. Next — Day 9: Skill Distiller + Curator (write path)
+## 7. Next — Day 10: Ablation Study + Embedding upgrade
 
-Day 7 shipped the read path. Day 8 added run-history telemetry. Day 9 adds
-the *content* write path: a Distiller agent that proposes new skills after a
-run, a Curator UI that lets a human accept / deprecate / pin them, and the
-supporting MCP write tools. Critically, the Distiller now has real history
-data to consume, so admission can be evidence-gated rather than vibes-based.
+Day 9 closed the learning loop (Telemetry → Distiller → HITL → Skill in
+library → Acceptance feedback → Curator). Day 10 turns the loop into a
+measurable system and replaces the placeholder similarity heuristics with
+real embeddings.
 
-### 9a. Distiller agent
+### 10a. Ablation harness (skills ON vs OFF)
 
-- `src/agents/distiller.py:run_distiller(state, history, llm) -> list[Skill]`.
-  Input: the full post-supervisor `GraphState` for the *current* run, plus
-  recent history records. Output: 0–3 candidate skills phrased as
-  `Skill(status="proposed", created_by="distiller", learned_from_prds=[...])`.
-- Prompt shape mirrors the fragment .md skeleton so the agent's output can
-  be written straight to disk if accepted.
+- `src/eval/ablation.py:run_ablation(prd_paths, llm)` — runs each PRD
+  twice: once with the Skill Library enabled, once with retrieval forced
+  to return `[]` (ENV `DISABLE_SKILL_RETRIEVAL=1`). Compares:
+  * Critique counts by severity.
+  * P0/P1/P2 verdict deltas.
+  * Defect-detection rate against the golden manifest's HTML-commented
+    expected defects (`src/eval/golden_prds/manifest.yaml`).
+  * Mean `acceptance_rate` of the on-run skills (from `runtime_stats.yaml`).
+- Write results to `data/results/ablation/run_<ts>.json` and surface a
+  side-by-side table in a new "📊 Ablation" sidebar tab.
+- Pin a baseline number per golden PRD so Day 10+ regressions are visible.
 
-### Day 9 Distiller 设计要点 (hard rules — do not relax)
+### 10b. Embedding upgrade — kill three debts in one stroke
 
-These came out of the Day 8 review and are non-negotiable. The point of
-adding history persistence first is precisely so the Distiller can be
-evidence-gated; if we let it propose from a single run we recreate the
-"founder-fiction skill" failure mode the system is supposed to detect.
+Resolves **D-01** (`CONVERGENCE_SIMILARITY_THRESHOLD`), **D-02** (skill
+retriever ranking) and **D-10** (Distiller clustering).
 
-1. **Input must include `HistoryStore.query(only_misses=True)` over the
-   recent N records** (default N=20). The current run alone is insufficient
-   evidence — the agent must see prior PRDs where some critique fired with
-   `skill_id=None`, i.e. unattributed findings the existing library failed
-   to cover.
-2. **Admission threshold: same finding pattern in ≥3 different PRDs.**
-   A pattern observed in fewer than 3 distinct `run_id`s is not yet a
-   reusable heuristic, and the Distiller must NOT propose a skill for it.
-   Implemented as a pre-filter on the agent's input (group misses by
-   pattern signature first, hand the agent only ≥3-PRD clusters), AND
-   re-checked in code post-output (defensive — drop any proposal whose
-   evidence list spans <3 distinct run_ids).
-3. **Output must include `evidence: list[{run_id, critique_ref}]`.** Every
-   proposed skill carries a literal pointer back to the misses that
-   justified it. The Curator UI surfaces this so the human reviewer can
-   click through to the source critiques before accepting. No evidence
-   field → automatic reject (handled in code, not just prompt).
-4. **Reject if no evidence.** Belt-and-braces with rule 3: if the agent
-   returns a proposal whose `evidence` is empty / malformed / references
-   run_ids not in `HistoryStore`, drop it silently and log a warning.
-   Never surface unevidenced proposals to the human — that re-introduces
-   founder-fiction one layer up.
+- Add `sentence-transformers` to requirements; cache embeddings on disk
+  under `data/embeddings/skills.npz` keyed by SKILL.md sha256.
+- Replace the three SequenceMatcher call sites:
+  1. `src/graph/edges.py` cross-challenge convergence — bump to 0.85
+     cosine (the number we wanted but couldn't honour with difflib).
+  2. `src/skills/retriever.py` keyword scoring — fold cosine similarity
+     into the score; keep keyword count as a tie-break for transparency.
+  3. `src/agents/skill_distiller.py` clustering — replace 0.6 ratio with
+     0.75 cosine on finding embeddings; pre-cluster across PRDs in a
+     single linkage pass.
+- Provide a fallback in `src/embeddings/__init__.py` that returns
+  difflib-based scores when the model can't load (no GPU / no network).
 
-### 9b. Curator UI + write tools
-
-- `src/skills/writer.py`: `accept_skill(draft) → Skill`, `deprecate_skill(id)`,
-  `pin_skill(id)`. Acceptance writes to `library.yaml` + `fragments/*.md`
-  atomically (temp-file + rename); deprecate flips `status`. Build on the
-  same atomic-write helpers `SkillCurator` already uses.
-- `SkillCurator.update_acceptance` and `SkillCurator.deprecate` (the Day 8
-  stubs raising `NotImplementedError`) get filled in here.
-- New MCP tools on `skill_server`: `propose_skill`, `accept_skill`,
-  `deprecate_skill`. Every write goes through a human-in-the-loop gate —
-  the server's `accept_skill` will refuse unless the caller passes an
-  `approved_by` token set in the Streamlit UI.
-- Enable the `📌 Pin` / `🗑 Deprecate` buttons in the sidebar (currently
-  disabled placeholders). Wire a "Proposed skills" section that shows the
-  distiller's output after each run with Accept / Reject buttons, and
-  surfaces the evidence list as clickable run_id chips that jump to the
-  Run History panel.
-
-### 9c. OpenAI wiring (parallel track if the key arrives)
+### 10c. OpenAI wiring (still parallel track)
 
 - `src/llm/openai_provider.py` implementing `complete` + `stream` with
   chunks shaped as `{"type":"text","delta":str}`.
 - Flip `src/config.py` branches, set `LLM_PROVIDER=openai` in `.env`.
 - Add token-budget guard on supervisor prompt (debt D-07).
+- Move `_maybe_auto_distill` to a background worker before
+  flipping `DISABLE_AUTO_DISTILL=0` against the real API (debt D-11).
 
-### Out of scope for Day 9
+### Out of scope for Day 10
 
-- Eval harness / ablation (Day 10), embedding-based similarity (Day 10),
-  frontend polish (stretch any day).
+- Frontend polish (rolled forward indefinitely).
+- Real-time event streaming for the Run History sidebar.
 
 ---
 
-## Quick sanity checklist before starting Day 9
+## Quick sanity checklist before starting Day 10
 
 ```
 pip install -e .                              # package installs
 pip install -r requirements.txt               # includes mcp>=1.0
-pytest tests/ -W error                        # 61 pass, 0 warnings
+pytest tests/ -W error                        # 77 pass, 0 warnings
 python -m src.mcp_servers.skill_server        # stdio server starts; Ctrl-C to exit
 streamlit run src/ui/streamlit_app.py
   → Top-of-page badge: 🏷️ Anthropic Agent Skills v1.0 compliant
@@ -542,8 +618,14 @@ streamlit run src/ui/streamlit_app.py
   → src/skills/runtime_stats.yaml: matching skills' usage_count incremented + last_used stamped
   → src/skills/seed/*/SKILL.md is UNCHANGED (telemetry decoupling working)
   → Every critique card carries a "💡 Triggered by skl_xxx" chip
+  → ✓ Useful / ✗ Not useful buttons appear under critiques with a skill_id
+  → Clicking either updates acceptance_rate + acceptance_history in runtime_stats.yaml
+  → Run 5 different golden PRDs → "🧪 Skill Distillation" panel shows "5 runs in history"
+  → Click "▶️ Run Distiller" → 0–N candidate cards appear (depends on miss patterns)
+  → Approve a candidate → src/skills/learned/<name>/SKILL.md created
+  → Next PRD run: new skill may appear as "💡 Triggered by <name>" on a critique
   → "💬 Discuss" buttons still work (Day 6 regression)
   → Cross-Challenge + Supervisor sections unchanged (Day 5/4 regression)
 ```
 
-If any step above fails, do NOT start Day 9 — fix the regression first.
+If any step above fails, do NOT start Day 10 — fix the regression first.

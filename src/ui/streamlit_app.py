@@ -15,12 +15,14 @@ from pathlib import Path
 import streamlit as st
 
 from src.agents.critique_dialog import MAX_DIALOG_ROUNDS, run_critique_dialog
+from src.agents.skill_distiller import run_distiller
 from src.agents.supervisor import run_supervisor_stream
 from src.graph.state import Critique
 from src.llm.mock_provider import MockProvider
 from src.main import persist_run, run_pipeline
+from src.skills.curator import SkillCurator
 from src.skills.mcp_client import list_skills, read_skill_md
-from src.storage import HistoryStore
+from src.storage import HistoryStore, ProposalsStore
 
 
 GOLDEN_DIR = Path(__file__).resolve().parents[1] / "eval" / "golden_prds"
@@ -83,6 +85,30 @@ def _render_critique(c: dict) -> None:
 
     st.markdown(f"**Evidence:** {c.get('evidence', '')}")
     st.markdown(f"**Suggested fix:** {c.get('suggested_fix', '')}")
+
+    # HITL feedback row — only meaningful when a skill_id is attached.
+    if skill_id:
+        feedback = st.session_state.setdefault("critique_feedback", {})
+        already = feedback.get(uid)
+        col_yes, col_no, col_status = st.columns([1, 1, 4])
+        if col_yes.button("✓ Useful", key=f"fb_yes_{uid}", disabled=already is not None):
+            try:
+                SkillCurator().update_acceptance(skill_id, accepted=True)
+                feedback[uid] = "accepted"
+                st.rerun()
+            except Exception as e:  # pragma: no cover
+                st.warning(f"feedback failed: {e}")
+        if col_no.button("✗ Not useful", key=f"fb_no_{uid}", disabled=already is not None):
+            try:
+                SkillCurator().update_acceptance(skill_id, accepted=False)
+                feedback[uid] = "rejected"
+                st.rerun()
+            except Exception as e:  # pragma: no cover
+                st.warning(f"feedback failed: {e}")
+        if already == "accepted":
+            col_status.success("Recorded as ✓ useful — feeds skill acceptance_rate")
+        elif already == "rejected":
+            col_status.info("Recorded as ✗ not useful — feeds skill acceptance_rate")
 
     # Discuss button — opens a dialog for this critique.
     active = st.session_state.get("active_dialogs", {})
@@ -431,6 +457,163 @@ def _render_run_history_sidebar() -> None:
                         )
 
 
+def _render_distillation_panel() -> None:
+    """🧪 Skill Distillation — Day 9 HITL approval loop.
+
+    Shows recent history stats, a Run Distiller button, and a card per
+    pending proposal with Approve / Reject / Edit affordances.
+    """
+    st.sidebar.header("🧪 Skill Distillation")
+
+    try:
+        history = HistoryStore()
+        runs = history.list_recent(n=10_000)
+        miss_runs = history.query(only_misses=True)
+    except Exception as e:  # pragma: no cover
+        st.sidebar.error(f"Failed to load history: {e}")
+        return
+
+    miss_critiques = sum(
+        sum(1 for c in r.critiques if not c.get("skill_id")) for r in miss_runs
+    )
+    st.sidebar.caption(
+        f"{len(runs)} run(s) in history · {miss_critiques} unhit critiques across "
+        f"{len(miss_runs)} run(s)"
+    )
+
+    col_run, col_clear = st.sidebar.columns([2, 1])
+    if col_run.button(
+        "▶️ Run Distiller",
+        key="run_distiller_btn",
+        use_container_width=True,
+    ):
+        with st.sidebar:
+            with st.spinner("Mining cross-PRD patterns…"):
+                try:
+                    proposals = asyncio.run(run_distiller(MockProvider(), history))
+                    store = ProposalsStore()
+                    for p in proposals:
+                        store.save(p)
+                    st.session_state["last_distill_count"] = len(proposals)
+                except Exception as e:  # pragma: no cover
+                    st.error(f"Distiller failed: {e}")
+                    return
+        st.rerun()
+
+    if col_clear.button("Clear", key="clear_distill_btn", help="dismiss the result banner"):
+        st.session_state.pop("last_distill_count", None)
+        st.rerun()
+
+    last = st.session_state.get("last_distill_count")
+    if last is not None:
+        if last == 0:
+            st.sidebar.info("No new candidates this run.")
+        else:
+            st.sidebar.success(f"Found {last} candidate skill(s).")
+
+    # ---- Pending proposals -------------------------------------------------
+    try:
+        pending = ProposalsStore().list_pending()
+    except Exception as e:  # pragma: no cover
+        st.sidebar.error(f"Failed to load proposals: {e}")
+        return
+
+    if not pending:
+        st.sidebar.caption("No pending proposals.")
+        return
+
+    st.sidebar.caption(f"{len(pending)} pending proposal(s)")
+    for p in pending:
+        _render_proposal_card(p)
+
+
+def _render_proposal_card(proposal) -> None:
+    """One proposal expander in the sidebar with Approve/Reject/Edit."""
+    score = proposal.generalization_score
+    score_color = "🟢" if score >= 0.8 else ("🟡" if score >= 0.7 else "🔴")
+    title = f"{score_color} {proposal.proposed_name}  ·  gen={score:.2f}"
+    with st.sidebar.expander(title, expanded=False):
+        # Pull description out of the SKILL.md frontmatter for the summary.
+        desc = _frontmatter_field(proposal.proposed_skill_md, "description") or "—"
+        st.caption(
+            f"freq={proposal.pattern_frequency} PRDs · "
+            f"injected_into: {', '.join(proposal.injected_into)}"
+        )
+        st.write(desc)
+        st.progress(min(max(score, 0.0), 1.0))
+
+        # Evidence — collapsible list of (run_id, critique_excerpt).
+        if proposal.evidence:
+            with st.expander(
+                f"📎 Evidence ({len(proposal.evidence)} rows)", expanded=False
+            ):
+                for ev in proposal.evidence:
+                    st.markdown(
+                        f"`{ev.get('run_id','?')[:12]}` — {ev.get('critique_excerpt','')}"
+                    )
+
+        # Full SKILL.md preview / edit.
+        with st.expander("📄 Full SKILL.md", expanded=False):
+            edit_key = f"edit_md_{proposal.proposal_id}"
+            edited = st.text_area(
+                "SKILL.md",
+                value=proposal.proposed_skill_md,
+                height=300,
+                key=edit_key,
+            )
+
+        col_a, col_r, col_e = st.columns(3)
+        if col_a.button("✅ Approve", key=f"approve_{proposal.proposal_id}"):
+            try:
+                # Persist any pending edits first, then promote.
+                if (
+                    edited := st.session_state.get(f"edit_md_{proposal.proposal_id}")
+                ) and edited != proposal.proposed_skill_md:
+                    ProposalsStore().update_status(
+                        proposal.proposal_id, "edited", edited_md=edited
+                    )
+                path = ProposalsStore().promote_to_skill(proposal.proposal_id)
+                if path is None:
+                    st.error("Promotion failed — see logs.")
+                else:
+                    st.success(f"✅ Skill added: {proposal.proposed_name}")
+                    st.rerun()
+            except Exception as e:  # pragma: no cover
+                st.error(f"approve failed: {e}")
+        if col_r.button("❌ Reject", key=f"reject_{proposal.proposal_id}"):
+            ProposalsStore().update_status(proposal.proposal_id, "rejected")
+            st.rerun()
+        if col_e.button("✏️ Save edit", key=f"save_edit_{proposal.proposal_id}"):
+            edited_now = st.session_state.get(f"edit_md_{proposal.proposal_id}")
+            if edited_now and edited_now != proposal.proposed_skill_md:
+                ProposalsStore().update_status(
+                    proposal.proposal_id, "edited", edited_md=edited_now
+                )
+                st.success("Edit saved (status: edited).")
+                st.rerun()
+            else:
+                st.info("No changes to save.")
+
+
+def _frontmatter_field(skill_md: str, field: str) -> str | None:
+    """Best-effort scrape of one frontmatter field for the card summary."""
+    if not skill_md.startswith("---"):
+        return None
+    try:
+        end = skill_md.index("\n---", 3)
+        block = skill_md[3:end]
+    except ValueError:
+        return None
+    import yaml  # local — avoid import-time cost on the happy path
+
+    try:
+        data = yaml.safe_load(block) or {}
+    except Exception:  # noqa: BLE001
+        return None
+    val = data.get(field)
+    return str(val) if val else None
+
+
 def _render_skill_library_sidebar() -> None:
     """Render the Skill Library panel in the Streamlit sidebar.
 
@@ -498,6 +681,7 @@ def main() -> None:
 
     _render_run_history_sidebar()
     _render_skill_library_sidebar()
+    _render_distillation_panel()
 
     golden = _load_golden_prds()
 
