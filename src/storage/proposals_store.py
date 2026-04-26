@@ -24,10 +24,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from typing import TYPE_CHECKING
+
 import yaml
 
-from ..agents.skill_distiller import SkillProposal
 from ..skills.retriever import LEARNED_DIR, RUNTIME_STATS_PATH, SKILL_FILENAME, parse_skill_md
+
+if TYPE_CHECKING:
+    from ..agents.skill_distiller import SkillProposal
+
+
+def _SkillProposal():
+    """Lazy import to break the cycle (skill_distiller imports HistoryStore,
+    which lives in src.storage; src.storage.__init__ imports this module).
+    Resolved by deferring the import to call time."""
+    from ..agents.skill_distiller import SkillProposal as _SP
+
+    return _SP
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +90,7 @@ class ProposalsStore:
             return None
         try:
             with path.open("r", encoding="utf-8") as f:
-                return SkillProposal.model_validate(json.load(f))
+                return _SkillProposal().model_validate(json.load(f))
         except Exception as e:  # noqa: BLE001
             logger.warning("ProposalsStore.load(%s) failed: %s", proposal_id, e)
             return None
@@ -172,7 +185,7 @@ class ProposalsStore:
         for path in self.base_dir.glob("*.json"):
             try:
                 with path.open("r", encoding="utf-8") as f:
-                    out.append(SkillProposal.model_validate(json.load(f)))
+                    out.append(_SkillProposal().model_validate(json.load(f)))
             except Exception as e:  # noqa: BLE001
                 logger.warning("ProposalsStore: skipping unreadable %s: %s", path, e)
         out.sort(key=lambda p: p.created_at, reverse=True)
