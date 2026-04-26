@@ -9,12 +9,12 @@ the subscription on first failure, losing revenue and churning recoverable users
 When a recurring charge fails, enqueue it for retry. Retry up to 3 times spaced over
 24 hours. If all retries fail, then cancel the subscription as today. Notify the user
 **immediately** of each failure via email.
-<!-- DEFECT #1 [P0, internal_contradiction]: Solution says "Retry up to 3 times spaced over 24 hours" — so the outcome is not known for up to 24h — but also says users are notified "immediately" of each failure. Immediate notification of a soft-decline that will silently succeed on retry will alarm users and drive support volume. The two behaviors conflict. -->
+<!-- DEFECT #1 [P0, internal_contradiction]: Solution says "Retry up to 3 times spaced over 24 hours" — so the outcome is not known for up to 24h — yet says users are notified "immediately" of each failure. Immediate notification of a soft-decline that will silently succeed on retry will alarm users and drive support volume. The two behaviors conflict. -->
 
 ## UX
 - User receives email on each failed attempt.
-- Account billing page shows "payment retrying" state.
-- After final failure, user sees "subscription cancelled" state and a "Re-subscribe" button.
+- Account billing page shows a "payment retrying" state.
+- After final failure, user sees a "subscription cancelled" state and a "Re-subscribe" link.
 
 ## Requirements
 - Retry only "retryable" failures. Non-retryable failures (e.g. fraud) go straight
@@ -23,7 +23,7 @@ When a recurring charge fails, enqueue it for retry. Retry up to 3 times spaced 
 
 ## Metrics
 - Recover 15% of previously-cancelled failed payments.
-<!-- DEFECT #3 [P1, metric_quality]: "15% of previously-cancelled" — the baseline denominator is stated but there is no measurement window, no statistical significance threshold, and no guardrail metric (e.g. chargeback rate) that would catch us over-retrying genuinely bad cards. -->
+<!-- DEFECT #3 [P1, metric_quality]: "15% of previously-cancelled" — the baseline denominator is stated, the measurement window is missing, and so is a statistical significance threshold and a guardrail metric (e.g. chargeback rate) that would catch us over-retrying genuinely bad cards. -->
 
 ## Launch
 - Roll out to 100% of subscriptions on launch day.

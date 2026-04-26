@@ -11,15 +11,15 @@ setup, workspace creation, teammate invite, first-project setup, and a product t
 Each step has a skip link so users never feel forced.
 
 ## UX
-- Full-screen modal on first login.
-- Progress bar at the top; each step can be skipped via a "Skip for now" link.
+- Full-bleed overlay on first login.
+- Progress indicator at the top; each step can be skipped via a "Skip for now" link.
 - Users can re-enter the tour later from Settings.
 - Supported on mobile and web.
-<!-- DEFECT #1 [P2, scope_ambiguity]: "Supported on mobile and web" — no parity spec. Does mobile get all 5 steps? Is the modal adapted for small screens? Are skip-links identical? -->
+<!-- DEFECT #1 [P2, scope_ambiguity]: "Supported on mobile and web" — no parity spec. Does mobile get all 5 steps? Is the overlay adapted for small surfaces? Are skip-links identical? -->
 
 ## Requirements
-- All 5 steps are **mandatory** for new accounts created after launch.
-<!-- DEFECT #2 [P1, internal_contradiction]: UX says each step has "Skip for now" and users "never feel forced". Requirements says all 5 steps are "mandatory". These conflict and engineering cannot implement both. -->
+- All 5 steps are enforced for new accounts created after launch.
+<!-- DEFECT #2 [P1, internal_contradiction]: UX says each step has "Skip for now" and users "never feel forced". Requirements says all 5 steps are enforced. These conflict and engineering cannot implement both. -->
 - Completion data must be logged per-step for analytics.
 
 ## Metrics
