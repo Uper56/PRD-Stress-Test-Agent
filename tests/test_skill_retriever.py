@@ -34,10 +34,13 @@ SEED_NAMES = {
 
 
 def test_load_library_includes_all_seed_skills_with_bodies() -> None:
+    """Seed skills must all be loadable. Learned skills (Day 9 promotions)
+    may also be present — we don't fail when the library has extras."""
     r = SkillRetriever()
     lib = r.load_library()
     names = {s.name for s in lib.skills}
-    assert names == SEED_NAMES, f"unexpected library contents: {names}"
+    missing = SEED_NAMES - names
+    assert not missing, f"seed skills missing from library: {missing}"
     for s in lib.skills:
         assert s.prompt_fragment_content, f"{s.name} missing markdown body"
         assert "## When to apply" in s.prompt_fragment_content, (
@@ -121,9 +124,11 @@ async def test_skill_id_stays_null_when_no_keywords_match() -> None:
 # ---- MCP client surface (mirror of MCP server tools) ----------------------
 
 
-def test_mcp_list_skills_returns_six_active() -> None:
+def test_mcp_list_skills_returns_at_least_six_active_seed_skills() -> None:
+    """The 6 seed skills must all be listed; learned skills are allowed extras."""
     items = list_skills()
-    assert len(items) == 6
+    names = {s["name"] for s in items}
+    assert SEED_NAMES.issubset(names), f"missing seed skills: {SEED_NAMES - names}"
     assert all(s["status"] == "active" for s in items)
     assert all("prompt_fragment_content" not in s for s in items)
     # The new spec exposes name (= id) and version on every entry.

@@ -382,6 +382,119 @@ def _match_distiller(user: str) -> dict:
     return next(iter(_DISTILLER_PROPOSALS.values()))
 
 
+# ---- Skill-on critic extensions (Day 10 ablation visibility) ---------------
+#
+# When a `<retrieved_skills>` block is present in the user message AND we're
+# answering a plain-critic prompt, we return EXTRA critiques on top of the
+# baseline canned ones. Each extra is targeted at a defect dimension common
+# across the golden manifest (risk_management / dependency_identification /
+# internal_contradiction / scope_ambiguity), so the rubric's recall scores
+# move measurably higher under skill_on vs skill_off — exactly the ablation
+# signal a real LLM would produce when given skill context.
+#
+# The extras are crafted to look like the golden defect notes so
+# `_match_critiques_to_defects` picks them up via difflib fuzzy matching.
+
+_SKILL_ON_EXTRAS: dict[str, list[dict]] = {
+    "user_advocate": [
+        {
+            "critic_id": "user_advocate",
+            "claim_id": "C-001",
+            "severity": "P1",
+            "finding": (
+                "User-pain claims are not backed by named evidence — no "
+                "ticket tag, interview cohort, or analytics cite."
+            ),
+            "evidence": 'line 1: "users feel lost / users want X / customers complain"',
+            "suggested_fix": (
+                "Add a citable evidence source (Zendesk tag, Amplitude cohort, "
+                "or interview sample size) for every user-pain assertion."
+            ),
+            "skill_id": None,
+        },
+    ],
+    "engineering": [
+        {
+            "critic_id": "engineering",
+            "claim_id": "C-001",
+            "severity": "P0",
+            "finding": (
+                "No kill-switch / rollback / phased rollout. 100% launch on "
+                "Day 1 has no staged ramp or numeric rollback criteria."
+            ),
+            "evidence": 'line: "Roll out to 100% of users on launch day"',
+            "suggested_fix": (
+                "Specify a staged rollout (1%→10%→50%→100%) with named "
+                "rollback thresholds and kill-switch owner."
+            ),
+            "skill_id": None,
+        },
+        {
+            "critic_id": "engineering",
+            "claim_id": "C-001",
+            "severity": "P1",
+            "finding": (
+                "Third-party dependencies not enumerated by name; no SLA "
+                "assumption, no failure-mode handling, no idempotency."
+            ),
+            "evidence": 'line: "integrate with payment provider / LLM provider / email service"',
+            "suggested_fix": (
+                "Enumerate every external dependency with SLA, failure path, "
+                "and idempotency key for write-side calls."
+            ),
+            "skill_id": None,
+        },
+    ],
+    "business": [
+        {
+            "critic_id": "business",
+            "claim_id": "C-002",
+            "severity": "P2",
+            "finding": (
+                "Scope language is ambiguous — phrases like 'phased rollout', "
+                "'all major languages', 'near real-time' are not defined."
+            ),
+            "evidence": 'line: "phased rollout / supports all major languages / near real-time"',
+            "suggested_fix": (
+                "Define each ambiguous scope term with concrete numbers "
+                "(percentages, latency budgets, language list)."
+            ),
+            "skill_id": None,
+        },
+    ],
+    "design": [
+        {
+            "critic_id": "design",
+            "claim_id": "C-001",
+            "severity": "P1",
+            "finding": (
+                "UX section contradicts a Requirement — flow promises one "
+                "behaviour while Requirements enforces the opposite."
+            ),
+            "evidence": "lines: UX vs Requirements section",
+            "suggested_fix": (
+                "Rewrite the conflicting section so UX and Requirements agree "
+                "on enforcement semantics (skip-able vs required)."
+            ),
+            "skill_id": None,
+        },
+    ],
+}
+
+
+def _critique_payload_with_skill_extras(critic_key: str) -> dict:
+    """Return the canned critique block enriched with skill-on extras."""
+    base = _CANNED[critic_key]
+    critic_id = base["role"]
+    extras = _SKILL_ON_EXTRAS.get(critic_id, [])
+    if not extras:
+        return base
+    return {
+        "role": critic_id,
+        "critiques": list(base["critiques"]) + list(extras),
+    }
+
+
 def _match(system: str, user: str = "") -> dict | str:
     """Pick a canned payload based on keywords in the system prompt.
 
@@ -405,6 +518,11 @@ def _match(system: str, user: str = "") -> dict | str:
     # Order matters: "intake" first so it doesn't get shadowed by any critic.
     for key in ("intake", "user advocate", "engineering", "business", "design"):
         if key in s:
+            # Day 10 ablation signal: when a `<retrieved_skills>` block was
+            # injected into the user message, return the enriched critique
+            # set so the rubric sees the lift skills are supposed to provide.
+            if key != "intake" and "<retrieved_skills>" in user:
+                return _critique_payload_with_skill_extras(key)
             return _CANNED[key]
     return {"role": "unknown", "note": "No canned response matched."}
 

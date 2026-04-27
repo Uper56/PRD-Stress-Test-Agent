@@ -14,9 +14,17 @@ from pathlib import Path
 
 import streamlit as st
 
+import json
+
 from src.agents.critique_dialog import MAX_DIALOG_ROUNDS, run_critique_dialog
 from src.agents.skill_distiller import run_distiller
 from src.agents.supervisor import run_supervisor_stream
+from src.eval.ablation import (
+    AblationConfig,
+    DEFAULT_OUTPUT_DIR as ABLATION_OUTPUT_DIR,
+    list_golden_prds,
+    run_ablation,
+)
 from src.graph.state import Critique
 from src.llm.mock_provider import MockProvider
 from src.main import persist_run, run_pipeline
@@ -668,6 +676,146 @@ def _render_skill_library_sidebar() -> None:
             col_b.button("🗑 Deprecate", key=f"dep_{name}", disabled=True)
 
 
+def _render_ablation_tab() -> None:
+    """📊 Ablation Results — load `data/results/ablation/latest.json` and render
+    a four-card headline + comparison table + bar chart.
+    """
+    st.header("📊 Ablation Results")
+    st.caption(
+        "Quantifies the contribution of the Skill Library by re-running each "
+        "PRD under multiple retrieval treatments and scoring against the "
+        "golden defect manifest."
+    )
+
+    latest = ABLATION_OUTPUT_DIR / "latest.json"
+    if not latest.exists():
+        st.info(
+            "No ablation report on disk yet. Click **Re-run Ablation** below "
+            "or run `python -m src.eval --quick` from the command line."
+        )
+    else:
+        try:
+            report = json.loads(latest.read_text(encoding="utf-8"))
+        except Exception as e:  # pragma: no cover
+            st.error(f"Failed to load latest.json: {e}")
+            report = None
+        if report:
+            _render_ablation_body(report)
+
+    st.divider()
+    st.subheader("Re-run Ablation")
+    col_a, col_b = st.columns([1, 1])
+    quick = col_a.checkbox(
+        "Quick mode (1 run / cell)", value=True, key="ablation_quick"
+    )
+    if col_b.button("▶️ Re-run Ablation", type="primary", key="ablation_run_btn"):
+        with st.spinner("Running ablation sweep — this can take ~1 minute…"):
+            try:
+                treatments = [
+                    AblationConfig.preset(n)
+                    for n in (
+                        "skill_off",
+                        "skill_seed_only",
+                        "skill_seed_plus_learned",
+                    )
+                ]
+                asyncio.run(
+                    run_ablation(
+                        prd_files=list_golden_prds(),
+                        treatments=treatments,
+                        runs_per_treatment=1 if quick else 3,
+                        output_dir=ABLATION_OUTPUT_DIR,
+                    )
+                )
+                st.success("Ablation complete — refresh / scroll up to see results.")
+            except Exception as e:  # pragma: no cover
+                st.error(f"Ablation failed: {e}")
+        st.rerun()
+
+    st.caption(
+        "Disclaimer: numbers above come from MockProvider — they validate the "
+        "ablation pipeline, not real LLM behaviour. Rerun against OpenAI when "
+        "the API key arrives."
+    )
+
+
+def _render_ablation_body(report: dict) -> None:
+    treatments: list[str] = report.get("treatments") or []
+    aggregated: dict = report.get("aggregated") or {}
+
+    # ---- Headline cards: ON vs OFF on 4 metrics ----------------------------
+    if {"skill_off", "skill_seed_plus_learned"}.issubset(set(treatments)):
+        on, off = "skill_seed_plus_learned", "skill_off"
+    elif len(treatments) >= 2:
+        off, on = treatments[0], treatments[-1]
+    else:
+        off = on = treatments[0] if treatments else None
+
+    if on and off and on != off:
+        st.subheader("Headline: skill_on vs skill_off")
+        cols = st.columns(4)
+        for col, label, key, fmt in zip(
+            cols,
+            ("Defect Recall", "Precision", "Avg Latency (s)", "Avg Cost ($)"),
+            ("overall_recall", "precision", "latency_seconds", "cost_usd_estimate"),
+            ("{:.2f}", "{:.2f}", "{:.2f}", "{:.3f}"),
+        ):
+            on_v = aggregated.get(on, {}).get(f"{key}_mean", 0.0)
+            off_v = aggregated.get(off, {}).get(f"{key}_mean", 0.0)
+            delta = on_v - off_v
+            col.metric(
+                label,
+                fmt.format(on_v),
+                f"{delta:+.2f} vs OFF",
+            )
+
+    # ---- Headline comparison table ----------------------------------------
+    st.subheader("Comparison Table")
+    rows = [
+        ("Defect Recall", "overall_recall", "{:.2f}"),
+        ("Precision", "precision", "{:.2f}"),
+        ("Structure Compliance", "structure_compliance", "{:.2f}"),
+        ("Dependency Recall", "dependency_recall", "{:.2f}"),
+        ("Contradiction Detection", "contradiction_detection", "{:.2f}"),
+        ("Severity F1", "severity_classification_f1", "{:.2f}"),
+        ("Actionability", "actionability", "{:.2f}"),
+        ("Avg Latency (s)", "latency_seconds", "{:.2f}"),
+        ("Avg Cost ($)", "cost_usd_estimate", "{:.3f}"),
+        ("Critiques per Run", "critique_count", "{:.1f}"),
+    ]
+    table_rows = []
+    for label, key, fmt in rows:
+        row = {"Metric": label}
+        for t in treatments:
+            row[t] = fmt.format(
+                aggregated.get(t, {}).get(f"{key}_mean", 0.0)
+            )
+        table_rows.append(row)
+    st.table(table_rows)
+
+    # ---- Bar charts --------------------------------------------------------
+    st.subheader("Per-treatment Bar Charts")
+    chart_metrics = (
+        ("Defect Recall", "overall_recall"),
+        ("Precision", "precision"),
+        ("Avg Latency (s)", "latency_seconds"),
+        ("Avg Cost ($)", "cost_usd_estimate"),
+    )
+    for label, key in chart_metrics:
+        data = {
+            t: aggregated.get(t, {}).get(f"{key}_mean", 0.0) for t in treatments
+        }
+        st.markdown(f"**{label}**")
+        st.bar_chart(data)
+
+    # ---- Metadata ----------------------------------------------------------
+    st.caption(
+        f"Generated {report.get('timestamp','?')}  ·  "
+        f"PRDs: {len(report.get('prds_used', []))}  ·  "
+        f"runs/treatment: {report.get('runs_per_treatment', 1)}"
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title="PRD Stress Test", layout="wide")
     st.title("PRD Stress Test")
@@ -683,6 +831,16 @@ def main() -> None:
     _render_skill_library_sidebar()
     _render_distillation_panel()
 
+    page = st.tabs(["🏠 Stress Test", "📊 Ablation Results"])
+
+    with page[1]:
+        _render_ablation_tab()
+
+    with page[0]:
+        _render_main_tab()
+
+
+def _render_main_tab() -> None:
     golden = _load_golden_prds()
 
     st.subheader("Input")

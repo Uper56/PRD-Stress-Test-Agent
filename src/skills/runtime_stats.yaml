@@ -1,44 +1,44 @@
-# Runtime telemetry for skills, keyed by SKILL.md `name`.
-#
-# This file is the ONLY place runtime data lives. SKILL.md frontmatter and
-# bodies (under src/skills/seed/ and src/skills/learned/) stay diff-clean
-# across PRD runs; only this file is touched by the SkillCurator.
-#
-# Atomic writes via tempfile + os.replace; safe to read concurrently.
 skills:
   api-dependency-enumeration:
-    usage_count: 0
+    usage_count: 2
     acceptance_rate: null
-    last_used: null
+    last_used: '2026-04-27T12:45:17+00:00'
     status: active
     learned_from_prds: []
   quantified-metrics:
-    usage_count: 0
+    usage_count: 5
     acceptance_rate: null
-    last_used: null
+    last_used: '2026-04-27T12:45:17+00:00'
     status: active
     learned_from_prds: []
   phased-rollout:
-    usage_count: 0
+    usage_count: 5
     acceptance_rate: null
-    last_used: null
+    last_used: '2026-04-27T12:45:17+00:00'
     status: active
     learned_from_prds: []
   accessibility-check:
-    usage_count: 0
+    usage_count: 1
     acceptance_rate: null
-    last_used: null
+    last_used: '2026-04-27T12:44:49+00:00'
     status: active
     learned_from_prds: []
   user-evidence:
-    usage_count: 0
+    usage_count: 2
     acceptance_rate: null
-    last_used: null
+    last_used: '2026-04-27T12:44:57+00:00'
     status: active
     learned_from_prds: []
   internal-contradiction:
+    usage_count: 1
+    acceptance_rate: null
+    last_used: '2026-04-27T12:45:10+00:00'
+    status: active
+    learned_from_prds: []
+  non-happy-state-spec:
     usage_count: 0
     acceptance_rate: null
     last_used: null
     status: active
     learned_from_prds: []
+    created_at: '2026-04-27T12:45:32+00:00'
