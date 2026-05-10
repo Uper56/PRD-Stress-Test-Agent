@@ -131,6 +131,7 @@ streamlit run src/ui/streamlit_app.py      # 📊 Ablation tab loads latest.json
 - **Memento-Skills** — runtime telemetry / sliding-window acceptance / auto-deprecation lineage is borrowed from this line of work.
 - **Anthropic Agent Skills (Dec 2025)** — `SKILL.md` spec compliance means a Codex CLI extension could read this library unmodified.
 - **LangGraph (LangChain)** — the only orchestrator I've found that makes parallel-fan-out + reducer-merge first-class without hiding the wiring.
+- **UI design system** informed by [garden-skills](https://github.com/ConardLi/garden-skills) — an open-source skill distilled from Anthropic Claude Design's system prompt. The Streamlit theme uses garden-skills' "Modern tech / Blue-violet" preset (`oklch(0.55 0.25 250)` primary, Space Grotesk display + Inter body) and follows its anti-AI-cliché checklist (no purple→pink gradients, no left-border accent cards, no emoji-as-icon). Demonstrates the SKILL.md standard's composability across projects.
 
 ---
 

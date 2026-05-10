@@ -31,11 +31,21 @@ from src.main import persist_run, run_pipeline
 from src.skills.curator import SkillCurator
 from src.skills.mcp_client import list_skills, read_skill_md
 from src.storage import HistoryStore, ProposalsStore
+from src.ui.styles import (
+    compliance_badge_html,
+    dialog_panel_open_html,
+    inject_global_css,
+    severity_badge_html,
+    skill_chip_html,
+    thinking_html,
+)
 
 
 GOLDEN_DIR = Path(__file__).resolve().parents[1] / "eval" / "golden_prds"
 
-SEVERITY_COLOR = {"P0": "#c62828", "P1": "#ef9a00", "P2": "#6d6d6d"}
+# Severity colours moved into src/ui/styles.py — see PALETTE there.
+# We reach severity badges through `severity_badge_html()` so the per-call
+# inline style blob disappears and theme tweaks happen in one place.
 
 CRITIC_TABS = [
     ("user_advocate", "User Advocate"),
@@ -68,28 +78,20 @@ def _critique_uid(c: dict) -> str:
 
 def _render_critique(c: dict) -> None:
     sev = c.get("severity", "P?")
-    color = SEVERITY_COLOR.get(sev, "#888")
     uid = _critique_uid(c)
 
     st.markdown(
-        f"<span style='background:{color};color:white;padding:2px 6px;"
-        f"border-radius:4px;font-size:0.8em;'>{sev}</span> "
-        f"<b>{c.get('finding', '')}</b>",
+        f"{severity_badge_html(sev)} <b>{c.get('finding', '')}</b>",
         unsafe_allow_html=True,
     )
     st.caption(
         f"claim_id: {c.get('claim_id', '?')}  ·  "
         f"skill_id: {c.get('skill_id') or '—'}"
     )
-    # "💡 Triggered by" tag — links this critique back to the skill that fired.
+    # Skill chip — links this critique back to the skill that fired.
     skill_id = c.get("skill_id")
     if skill_id:
-        st.markdown(
-            f"<span style='background:#fff8d6;color:#7a5d00;padding:2px 8px;"
-            f"border-radius:10px;font-size:0.8em;border:1px solid #e6d488;'>"
-            f"💡 Triggered by <code>{skill_id}</code></span>",
-            unsafe_allow_html=True,
-        )
+        st.markdown(skill_chip_html(skill_id), unsafe_allow_html=True)
 
     st.markdown(f"**Evidence:** {c.get('evidence', '')}")
     st.markdown(f"**Suggested fix:** {c.get('suggested_fix', '')}")
@@ -148,11 +150,10 @@ def _render_dialog_panel(uid: str, dialog: dict) -> None:
     `st.session_state["active_dialogs"][uid]`, so closing and reopening the
     panel preserves history within the same session.
     """
+    # garden-skills anti-cliché: no coloured left-border accent.
+    # `dialog_panel_open_html` uses a flat surface tint + top-border instead.
     st.markdown(
-        "<div style='border-left:3px solid #4a90e2;padding:6px 12px;"
-        "margin:6px 0;background:rgba(74,144,226,0.06);'>"
-        f"<b>🗨 Follow-up with <code>{dialog['critic_id']}</code></b>"
-        "</div>",
+        dialog_panel_open_html(dialog["critic_id"]),
         unsafe_allow_html=True,
     )
 
@@ -223,26 +224,22 @@ def _render_dialog_panel(uid: str, dialog: dict) -> None:
         st.rerun()
 
 
-def _severity_chip(label: str, color: str) -> str:
-    return (
-        f"<span style='background:{color};color:white;padding:2px 8px;"
-        f"border-radius:4px;font-size:0.85em;'>{label}</span>"
-    )
-
-
 def _render_verdict(verdict: dict) -> None:
     st.markdown("#### Executive summary")
     st.info(verdict.get("executive_summary", "—"))
 
+    # Use the shared severity badge so verdict headings track palette
+    # changes from one place (src/ui/styles.py) instead of three.
     groups = [
-        ("P0 Blockers", "p0_blockers", "#c62828"),
-        ("P1 Concerns", "p1_concerns", "#ef9a00"),
-        ("P2 Suggestions", "p2_suggestions", "#6d6d6d"),
+        ("P0 Blockers", "p0_blockers", "P0"),
+        ("P1 Concerns", "p1_concerns", "P1"),
+        ("P2 Suggestions", "p2_suggestions", "P2"),
     ]
-    for label, key, color in groups:
+    for label, key, sev in groups:
         items = verdict.get(key, []) or []
         st.markdown(
-            f"{_severity_chip(label, color)} &nbsp; <b>({len(items)})</b>",
+            f"{severity_badge_html(sev)} <b>{label}</b> &nbsp; "
+            f"<span style='opacity:0.7'>({len(items)})</span>",
             unsafe_allow_html=True,
         )
         if not items:
@@ -278,8 +275,7 @@ def _stream_supervisor_sync(state: dict, llm, thinking_box) -> tuple[str, dict]:
             if stage == "thinking":
                 thinking_text += event.get("delta", "")
                 thinking_box.markdown(
-                    f"<div style='color:#888;font-style:italic;white-space:pre-wrap;'>"
-                    f"🟡 Thinking… {thinking_text}▌</div>",
+                    thinking_html(thinking_text, in_progress=True),
                     unsafe_allow_html=True,
                 )
             elif stage == "done":
@@ -290,8 +286,7 @@ def _stream_supervisor_sync(state: dict, llm, thinking_box) -> tuple[str, dict]:
     # Freeze the thinking placeholder (drop the cursor glyph) once streaming ends.
     if thinking_text:
         thinking_box.markdown(
-            f"<div style='color:#888;font-style:italic;white-space:pre-wrap;'>"
-            f"🟡 Thinking (done) {thinking_text}</div>",
+            thinking_html(thinking_text, in_progress=False),
             unsafe_allow_html=True,
         )
     return thinking_text, final_verdict
@@ -407,11 +402,10 @@ def _render_run(run: dict) -> None:
     thinking_text = run.get("thinking_text") or ""
     if thinking_text:
         st.markdown(
-            f"<div style='color:#888;font-style:italic;white-space:pre-wrap;'>"
-            f"🟡 Thinking (done) {thinking_text}</div>",
+            thinking_html(thinking_text, in_progress=False),
             unsafe_allow_html=True,
         )
-    st.markdown("### 🟢 Verdict")
+    st.markdown("### Verdict")
     _render_verdict(run.get("verdict") or {})
 
 
@@ -818,12 +812,13 @@ def _render_ablation_body(report: dict) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="PRD Stress Test", layout="wide")
+    # Global visual system — Modern tech / blue-violet preset, OKLCH-based.
+    # Must run before any st.markdown that styles itself, so it's the very
+    # first call after set_page_config.
+    inject_global_css()
     st.title("PRD Stress Test")
     st.markdown(
-        "<span style='background:#0a3d62;color:#cfe9ff;padding:3px 10px;"
-        "border-radius:12px;font-size:0.78em;border:1px solid #0a3d62;'>"
-        "🏷️ Anthropic Agent Skills v1.0 compliant"
-        "</span>",
+        compliance_badge_html("Anthropic Agent Skills v1.0 · compliant"),
         unsafe_allow_html=True,
     )
 
