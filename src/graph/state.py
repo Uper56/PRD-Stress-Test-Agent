@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 
 Severity = Literal["P0", "P1", "P2"]
-ClaimType = Literal["assumption", "requirement", "metric", "scope"]
+ClaimType = Literal["assumption", "requirement", "metric", "scope", "dependency"]
 
 
 class PRDClaim(BaseModel):

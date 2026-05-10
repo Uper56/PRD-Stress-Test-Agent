@@ -11,7 +11,7 @@ MCP server — not yet implemented.
 
 ---
 
-## 2. Progress — Days 1 through 10
+## 2. Progress — Days 1 through 11
 
 ### Day 1 — Scaffold
 - Repo skeleton, empty package tree, `.env.example`, `.gitignore`.
@@ -482,6 +482,109 @@ The system finally has a measurement loop. Pitch line:
 
 **Test suite: 85 tests, 0 warnings, runs in <7s.**
 
+### Day 11 — Real LLM integration + real ablation + README/architecture
+
+**The story changed.** Mock numbers said "skills lift recall +21%". Real
+LLM (gpt-4o-mini) says skills don't lift recall — they lift PRECISION
+and reduce noise. New pitch line:
+
+> "I ran an ablation against gpt-4o-mini and found that skill context
+> doesn't lift defect recall (the strong base model already finds 95%
+> of planted defects). What it does lift is precision — +30% on the
+> 5-PRD sweep, +100% on the 3-run stability check — and it makes the
+> output deterministic (σ=0.00 across 3 runs of the same PRD with
+> skills, vs σ=0.05 without). Skills are a discipline mechanism, not
+> a recall booster, and the auto-distilled skill measurably underperforms
+> the seed library — empirically validating the HITL approval gate."
+
+#### Stage A — Real-LLM provider
+
+- `src/llm/openai_provider.py` — async OpenAI / OpenAI-compatible-proxy
+  / Azure auto-detect. JSON-mode ON for critics, OFF for supervisor
+  (sniffs `"supervisor"` in the system prompt). Streaming yields
+  `{"type":"text","delta":str}` matching the MockProvider contract.
+  Single 5-second retry on 429 / `APITimeoutError`. Lazy import keeps
+  the rest of the package usable when `openai` isn't installed.
+- `src/llm/provider.py` — added `LLMError` / `LLMRateLimitError` /
+  `LLMTimeoutError` so retry/circuit-breaker callers don't have to
+  string-match exceptions.
+- `src/config.py` — new branches: `LLM_PROVIDER=openai` returns
+  `OpenAIProvider(model=gpt-4o-mini)` for critics with json_mode=ON,
+  `OpenAIProvider(model=gpt-4o)` for supervisor with json_mode=OFF.
+  Honours `OPENAI_BASE_URL`, `OPENAI_ORGANIZATION`, the Azure trio,
+  and per-tier `OPENAI_CRITIC_MODEL` / `OPENAI_SUPERVISOR_MODEL`.
+- `requirements.txt` — `openai>=1.50.0`. `.env.example` documents
+  every knob.
+- **Critical bug caught and fixed**: `run_ablation` defaulted
+  `llm_factory=MockProvider` regardless of `.env`. So the first
+  real-LLM ablation run silently re-ran MockProvider (4.2s/run, 4
+  critiques each — exact match for the Day-10 mock numbers, that's
+  what tipped me off). Fix: default to `get_critic_llm` so the
+  factory honours the env var. Tests pin `MockProvider` explicitly to
+  prevent surprise API spending.
+- `src/graph/state.py` — `ClaimType` Literal extended with
+  `"dependency"`; the real LLM emits this organically and was
+  hitting `pydantic.ValidationError` in intake.
+
+#### Stage B — Real ablation results
+
+**Main sweep (n=1, 5 PRDs × 3 treatments, ~$0.10–0.15, ~8 min):**
+
+| Metric             | skill_off | skill_seed_only | skill_seed_plus_learned |
+| ------------------ | --------: | --------------: | ----------------------: |
+| Defect Recall      | 0.95      | **0.95**        | 0.91                    |
+| Precision          | 0.30      | **0.39**        | 0.35                    |
+| Critiques per Run  | 15.2      | **12.2**        | 12.2                    |
+| False Positives    | 10.8      | **7.8**         | 8.0                     |
+
+**Stability check (n=3, prd_001, ~$0.05, ~5 min):**
+
+| Metric        | skill_off          | skill_seed_only         | skill_seed_plus_learned |
+| ------------- | -----------------: | ----------------------: | ----------------------: |
+| Recall        | 0.93 ± 0.09        | **1.00 ± 0.00**         | 0.93 ± 0.09             |
+| Precision     | 0.28 ± 0.05        | **0.56 ± 0.00**         | 0.44 ± 0.04             |
+| Latency (s)   | 33.9 ± 2.0         | 29.0 ± 2.3              | 30.1 ± 2.7              |
+| Critiques/run | 17.0 ± 1.4         | **9.0 ± 0.0**           | 10.7 ± 0.9              |
+
+Three findings worth keeping in the interview deck:
+
+1. **Recall saturates on a strong base model.** gpt-4o-mini already
+   finds ~95% of planted defects without any skill context. The
+   MockProvider "+21% recall" was a brittle-model artefact.
+2. **Skills lift precision, not recall.** −47% critiques per run, −55%
+   false positives, +100% precision in the n=3 cell. Σ also collapses
+   to 0.00 — skill context makes the system **reproducible**, which
+   matters more than headline recall when humans consume the output.
+3. **The auto-distilled learned skill measurably regresses** on every
+   metric vs `skill_seed_only`. Real data validates the HITL gate.
+
+Cost notes: `gpt-4o-mini` for both critics AND supervisor in this run
+because `run_pipeline` takes one LLM and threads it everywhere
+(simplification from Day 3). Splitting tracked as **D-14**. Total
+spend on this Day: ~$0.20.
+
+#### Stage C — README + architecture
+
+- `README.md` — rewritten top-to-bottom. First-screen has the
+  one-liner, both metric tables, and architecture mermaid. Sections:
+  What it does / Headline numbers (3 findings) / Architecture (mermaid)
+  / Key design decisions (5 bullets) / Quickstart / Tech stack /
+  Roadmap (3 v2 items) / Acknowledgments (Voyager, Memento-Skills,
+  Anthropic Agent Skills, LangGraph).
+- `docs/architecture.md` — interview-ready deep version. Per-component
+  trade-off, failure mode absorbed, debt anchored back to the ledger.
+  ~360 lines.
+- `docs/screenshots/` — scaffold + README. The actual PNGs need to be
+  captured locally from `streamlit run src/ui/streamlit_app.py`; the
+  README references them at the canonical paths.
+
+#### Tests
+
+- `tests/test_ablation.py` — pinned `llm_factory=MockProvider` on
+  every `run_ablation` call site so tests can never accidentally hit
+  a real API and burn money.
+- 85 tests, 0 warnings.
+
 #### Latest ablation snapshot (MockProvider)
 
 | Treatment                  | Recall | Precision | Latency (s) | Cost ($) |
@@ -546,6 +649,9 @@ suppress hallucinated criticisms, an effect MockProvider can't model).
 | Ablation runner + rubric         | `src/eval/{ablation,rubric}.py`                       |
 | Ablation CLI                     | `python -m src.eval --quick`                          |
 | Latest ablation report           | `data/results/ablation/latest.json` + `*_report.md`   |
+| Stability check (n=3, prd_001)   | `data/results/ablation_stability/latest.json`         |
+| OpenAI provider                  | `src/llm/openai_provider.py`                          |
+| Architecture deep-dive           | `docs/architecture.md`                                |
 | MCP server (read-only)           | `src/mcp_servers/skill_server.py` + `README.md`       |
 | MCP in-process client mirror     | `src/skills/mcp_client.py`                            |
 | Critique dialog (HITL)           | `src/agents/critique_dialog.py`                       |
@@ -632,13 +738,14 @@ so they don't silently rot.
 | D-04 | `SupervisorVerdict` schema is loose — parse failures fall back to a placeholder dict merged with whatever keys were parseable. | Day 9 eval harness. | `src/agents/supervisor.py` |
 | D-05 | ~~No CrossChallenge / critique / skill-hit telemetry persisted to `data/results/`.~~ **RESOLVED Day 8** — `HistoryStore` writes per-run JSON + `index.jsonl` summary; skill hits/misses recomputed at save time. | Day 8. ✅ | `src/storage/history_store.py` |
 | D-06 | Dialog module works only against MockProvider flavour text; it does NOT grow the reply based on the PM's question. Fine for demo, won't pass real eval. | Day 8 OpenAI wiring. | `src/llm/mock_provider.py` |
-| D-07 | Supervisor prompt has no token-budget guard. | Before first OpenAI call. | `src/agents/supervisor.py` |
+| D-07 | Supervisor prompt has no token-budget guard — Day 11 ran clean against gpt-4o-mini, but longer PRDs or paranoid critic rounds could exceed context. Add truncation before flipping the supervisor to gpt-4o (D-14). | Before D-14. | `src/agents/supervisor.py` |
 | D-08 | Streamlit UI is functional but unstyled — card borders, sticky header, dark-mode verification. | Rolled as Day 8 stretch. | `src/ui/streamlit_app.py` |
 | D-09 | ~~Day 9 Distiller MUST write spec-compliant SKILL.md folders…~~ **RESOLVED Day 9** — `src/agents/skill_distiller.py:_validate_proposal` rejects malformed proposals before they ever reach disk; `ProposalsStore.promote_to_skill` re-parses on the way out. | Day 9. ✅ | `src/agents/skill_distiller.py` |
 | D-10 | Distiller clustering uses `difflib.SequenceMatcher` ≥ 0.6. Misses obvious near-paraphrases (different vocabulary, same concept). Same upgrade path as D-01/D-02 (sentence-transformers). | Day 10 (embeddings). | `src/agents/skill_distiller.py` |
 | D-11 | Auto-distill is synchronous in `src/main.py:_maybe_auto_distill`. Fine under MockProvider (sub-second); blocks the request under real-API mode. Move to a worker queue or background task before flipping `DISABLE_AUTO_DISTILL=0` against OpenAI. | Before first OpenAI deployment. | `src/main.py` |
 | D-12 | Ablation rubric matcher uses `max(SequenceMatcher, token_jaccard)` at threshold 0.35. Calibrated against 5 golden PRDs but brittle to PRD-vocabulary drift. Same upgrade path as D-01/D-02/D-10 — sentence-transformers cosine. | Day 11 (embeddings). | `src/eval/rubric.py` |
-| D-13 | Ablation numbers come from MockProvider — they validate the pipeline, not real-LLM behaviour. Headline numbers in README must be regenerated against OpenAI before the project goes external. | Before publication / interview demo. | `data/results/ablation/`, `README.md` |
+| D-13 | ~~Ablation numbers come from MockProvider…~~ **RESOLVED Day 11** — README headline numbers are now real-LLM (gpt-4o-mini for both critics and supervisor; sweep n=1 across 5 PRDs + stability n=3 on prd_001). | Day 11. ✅ | `README.md` |
+| D-14 | `run_pipeline` / `build_graph` take a single `llm` and use it for both critics and supervisor. Real-LLM mode runs `gpt-4o-mini` for the supervisor; should be `gpt-4o`. Splitting requires threading a second provider through the graph (~30 LOC). | v2 — alongside the embedding upgrade. | `src/graph/builder.py`, `src/main.py`, `src/eval/ablation.py` |
 
 **Note on MCP server:** Day 7 shipped a *real* FastMCP stdio server, not the
 fallback `mcp_client.py`-only path. Both surfaces exist and share the same
@@ -648,54 +755,53 @@ this table with a "revert by Day 10" gate.
 
 ---
 
-## 7. Next — Day 11: README polish + architecture diagram + HuggingFace Space deployment
+## 7. Next — Day 12: HuggingFace Space deployment + demo recording
 
-Day 10 made the system measurable. Day 11 makes it **legible to a
-recruiter or interviewer in under 60 seconds** and gets it running on
-a public URL.
+Day 11 made the system legible (real numbers, README, architecture).
+Day 12 makes it **public** so a recruiter can click a link and try it
+without cloning.
 
-### 11a. README + architecture diagram
-
-- Hand-rendered architecture diagram (mermaid or `excalidraw → SVG`)
-  embedded in the README: PRD → intake → 4 critics (parallel) → merge →
-  cross-challenge → supervisor → verdict; with side branches for
-  Skill Library retrieval, Distiller mining, HITL approval, and the
-  Ablation harness.
-- README sections to add: "What I'd do with $X more time" (interview
-  prompt), "Trade-offs I made deliberately" (links to debt D-01..D-13),
-  "How to evaluate" (point at `python -m src.eval`).
-- One short demo GIF / screen recording embedded in the README.
-
-### 11b. HuggingFace Space deployment
+### 12a. HuggingFace Space
 
 - Add `Spacefile` / `app.py` shim that wraps `streamlit run`.
 - Pin Python 3.11 in `runtime.txt`.
-- Strip `.env`-required code paths so the public Space runs against
-  MockProvider out of the box (the OpenAI provider stays gated behind
-  `LLM_PROVIDER=openai`).
-- Add a top-of-page banner: "Demo runs on MockProvider — see HANDOFF
-  for the loop closing on real models."
-- Wire the Ablation tab to display `data/results/ablation/latest.json`
-  baked into the Space (no live re-run needed for the demo).
+- The public Space runs against MockProvider by default (no API
+  spending). Add a top-of-page banner: "Demo runs on MockProvider —
+  see README for real-LLM ablation numbers."
+- Bake the Day-11 `data/results/ablation/latest.json` into the Space
+  so the Ablation tab shows real numbers without a live re-run.
+- Strip the secret-required code paths cleanly — the OpenAI provider
+  stays gated behind `LLM_PROVIDER=openai` so a forked Space with the
+  user's own key would Just Work.
 
-### 11c. OpenAI wiring (still parallel track if the key arrives)
+### 12b. Demo recording
 
-- `src/llm/openai_provider.py` implementing `complete` + `stream`.
-- Flip `src/config.py` branches, set `LLM_PROVIDER=openai`.
-- Add token-budget guard on supervisor prompt (debt D-07).
-- Move `_maybe_auto_distill` off the request thread (debt D-11).
-- Regenerate the README ablation table from real numbers (debt D-13).
+- 90-second screen recording walking through:
+  1. Pick a golden PRD, click Run, watch supervisor stream live.
+  2. Critique cards with skill chips + ✓/✗ buttons.
+  3. 🧪 Distillation → Run Distiller → Approve a candidate.
+  4. 📊 Ablation tab — point at the precision lift.
+- Embed as GIF in README. Save MP4 to `docs/demo.mp4`.
 
-### Out of scope for Day 11
+### 12c. (Optional) Embedding upgrade — kills four debts at once
 
-- Embedding upgrade (rolled to Day 12 — kills D-01/D-02/D-10/D-12 in one
-  pass with sentence-transformers cosine on cached vectors).
-- Real-time event streaming.
-- Mobile-friendly UI rework.
+If time, replace the four difflib call sites with sentence-transformers
+cosine, resolving **D-01** (cross-challenge), **D-02** (skill retriever),
+**D-10** (distiller clustering), **D-12** (rubric matcher).
+
+- Cache embeddings under `data/embeddings/skills.npz` keyed by
+  SKILL.md sha256.
+- Soft fallback to difflib when the model can't load (no GPU / no net).
+
+### Out of scope for Day 12
+
+- D-14 supervisor LLM split (rolled to v2 — gpt-4o-mini supervisor is
+  honestly fine for the demo).
+- Confluence MCP, multi-tenant marketplace (v2 roadmap items).
 
 ---
 
-## Quick sanity checklist before starting Day 11
+## Quick sanity checklist before starting Day 12
 
 ```
 pip install -e .                              # package installs
@@ -726,6 +832,10 @@ streamlit run src/ui/streamlit_app.py
   → "📊 Ablation Results" tab loads latest.json and renders 4 metric cards + bar charts
   → Re-run Ablation button completes a quick sweep without UI errors
   → README ablation table reflects the latest.json numbers
+  → README first screen shows one-liner + both number tables + mermaid arch
+  → docs/screenshots/main.png and ablation.png exist (capture from streamlit)
+  → Real LLM smoke (.env LLM_PROVIDER=openai): one PRD run produces
+    ~10+ critiques in ~30s, supervisor verdict streams live
 ```
 
-If any step above fails, do NOT start Day 11 — fix the regression first.
+If any step above fails, do NOT start Day 12 — fix the regression first.

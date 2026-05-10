@@ -79,6 +79,7 @@ def test_run_ablation_executes_full_grid_and_persists(tmp_path: Path) -> None:
     ]
     report = asyncio.run(
         run_ablation(
+            llm_factory=MockProvider,  # pin Mock so test never hits a real API
             prd_files=prds,
             treatments=treatments,
             output_dir=tmp_path,
@@ -117,6 +118,7 @@ def test_skill_off_vs_skill_on_recall_delta_is_visible(tmp_path: Path) -> None:
     ]
     report = asyncio.run(
         run_ablation(
+            llm_factory=MockProvider,  # pin Mock so test never hits a real API
             prd_files=prds,
             treatments=treatments,
             output_dir=tmp_path,
@@ -134,6 +136,7 @@ def test_render_markdown_report_handles_single_treatment(tmp_path: Path) -> None
     """A single-treatment report must still render (no Δ column blow-up)."""
     report = asyncio.run(
         run_ablation(
+            llm_factory=MockProvider,  # pin Mock so test never hits a real API
             prd_files=list_golden_prds()[:1],
             treatments=[AblationConfig.preset("skill_off")],
             output_dir=tmp_path,

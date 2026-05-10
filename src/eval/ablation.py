@@ -35,6 +35,7 @@ from typing import Any, Iterator, Literal
 
 from pydantic import BaseModel, Field
 
+from ..config import get_critic_llm
 from ..llm.mock_provider import MockProvider
 from ..llm.provider import LLMProvider
 from ..main import run_pipeline
@@ -257,11 +258,14 @@ async def run_ablation(
       runs_per_treatment: how many times to run EACH (treatment, PRD)
         pair. Mock numbers are deterministic so >1 just multiplies cost
         for no signal. Real-API mode benefits from 3+ for variance.
-      llm_factory: callable returning a fresh LLMProvider per run. Tests
-        inject `MockProvider`. Default = MockProvider().
+      llm_factory: callable returning a fresh LLMProvider per run. When
+        omitted we honour the `LLM_PROVIDER` env var via `get_critic_llm()`
+        — so flipping `.env` to `LLM_PROVIDER=openai` makes the ablation
+        run against the real LLM with no code change. Tests still pin
+        `MockProvider` explicitly.
       progress: optional `(done, total) -> None` callback for a UI bar.
     """
-    factory = llm_factory or MockProvider
+    factory = llm_factory or get_critic_llm
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
