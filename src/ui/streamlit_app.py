@@ -32,7 +32,7 @@ from src.skills.curator import SkillCurator
 from src.skills.mcp_client import list_skills, read_skill_md
 from src.storage import HistoryStore, ProposalsStore
 from src.ui.styles import (
-    compliance_badge_html,
+    compliance_badge_block_html,
     dialog_panel_open_html,
     inject_global_css,
     severity_badge_html,
@@ -817,10 +817,10 @@ def main() -> None:
     # first call after set_page_config.
     inject_global_css()
     st.title("PRD Stress Test")
-    st.markdown(
-        compliance_badge_html("Anthropic Agent Skills v1.0 · compliant"),
-        unsafe_allow_html=True,
-    )
+    # `st.html()` because Streamlit's markdown sanitiser strips the
+    # styled <span> we want here (since ~1.33). Same reason as
+    # inject_global_css uses st.html for the <style> block.
+    st.html(compliance_badge_block_html("Anthropic Agent Skills v1.0 · compliant"))
 
     _render_run_history_sidebar()
     _render_skill_library_sidebar()

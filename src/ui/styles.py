@@ -70,20 +70,21 @@ PALETTE = {
 # CSS injection
 # ---------------------------------------------------------------------------
 
-_FONTS_LINK = (
-    '<link rel="preconnect" href="https://fonts.googleapis.com">'
-    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-    '<link href="https://fonts.googleapis.com/css2?'
-    "family=Space+Grotesk:wght@500;600;700&"
-    "family=Inter:wght@400;500;600&"
-    'display=swap" rel="stylesheet">'
-)
+# NOTE on font loading:
+# Streamlit's markdown sanitizer strips <link> and <style> tags (since
+# ~1.33) when passed through st.markdown(unsafe_allow_html=True), which
+# made the CSS render as a visible paragraph instead of styling the page.
+# We now inject through st.html() (which DOES preserve those tags) and
+# load fonts via `@import` INSIDE the <style> block — that way the whole
+# visual system is one self-contained HTML payload.
 
 
 def _build_css() -> str:
     p = PALETTE
     return f"""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+
 :root {{
   --color-primary: {p["primary"]};
   --color-primary-hover: {p["primary_hover"]};
@@ -182,7 +183,21 @@ html, body, .stApp,
   opacity: 0.45;
 }}
 
-/* ------- compliance badge (top-of-page label) --------------------------- */
+/* ------- title + compliance badge wrapper ------------------------------- */
+
+/* Centre the top-of-page title block (heading + compliance pill) so the
+   page has a clear visual anchor instead of left-rag chrome. */
+.psa-title-block {{
+  text-align: center;
+  margin: 0.5rem 0 1.25rem;
+}}
+/* Streamlit emits the title via st.title → an h1 inside the main
+   container. We center any h1 sitting directly under stMainBlockContainer
+   (the actual class name) without affecting headings inside expanders. */
+[data-testid="stAppViewContainer"] > .main h1,
+[data-testid="stMainBlockContainer"] > div > .stMarkdown h1 {{
+  text-align: center;
+}}
 
 .psa-compliance-badge {{
   display: inline-block;
@@ -300,11 +315,25 @@ html, body, .stApp,
 def inject_global_css() -> None:
     """Inject the global visual system. Call once at the top of `main()`.
 
-    Idempotent in practice: Streamlit deduplicates identical markdown
-    blocks across the same script run, so calling this twice in one
-    request does no harm.
+    Uses `st.html()` rather than `st.markdown(unsafe_allow_html=True)`
+    because the latter strips `<style>` and `<link>` tags as of Streamlit
+    ~1.33 — which caused the entire CSS payload to render as a visible
+    paragraph in earlier builds of this module.
     """
-    st.markdown(_FONTS_LINK + _build_css(), unsafe_allow_html=True)
+    st.html(_build_css())
+
+
+def compliance_badge_block_html(label: str) -> str:
+    """Centred title-block companion to the page title.
+
+    Wraps the compliance pill in a centred container so it sits directly
+    under the centred h1.
+    """
+    return (
+        f'<div class="psa-title-block">'
+        f'<span class="psa-compliance-badge">{label}</span>'
+        f"</div>"
+    )
 
 
 def severity_badge_html(severity: str) -> str:
