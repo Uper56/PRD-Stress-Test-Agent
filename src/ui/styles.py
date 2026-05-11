@@ -367,27 +367,33 @@ def compliance_badge_html(label: str) -> str:
     return f'<span class="psa-compliance-badge">{label}</span>'
 
 
-def dialog_panel_open_html(critic_id: str) -> str:
+def dialog_panel_open_html(critic_id: str, *, prefix: str = "Follow-up with") -> str:
     """Open tag for the inline critique-dialog panel.
 
-    Caller renders the chat history inside, then closes with
-    `dialog_panel_close_html()`. The panel uses a flat background tint
-    + top-border instead of the AI-cliché coloured left-border accent.
+    `prefix` is the heading text shown before the critic id, e.g.
+    "Follow-up with" or its Chinese equivalent "继续追问". Keeping it
+    parameterised means styles.py stays language-agnostic.
+
+    The panel uses a flat background tint + top-border instead of the
+    AI-cliché coloured left-border accent.
     """
     return (
         f'<div class="psa-dialog-panel">'
-        f"<b>Follow-up with <code>{critic_id}</code></b>"
+        f"<b>{prefix} <code>{critic_id}</code></b>"
         f"</div>"
     )
 
 
-def thinking_html(text: str, *, in_progress: bool) -> str:
+def thinking_html(text: str, *, in_progress: bool, label: str | None = None) -> str:
     """Render the supervisor's `<thinking>` trace with our typography.
 
     `in_progress=True` appends a cursor glyph; `False` freezes the trace
-    once streaming has finished.
+    once streaming has finished. `label` lets the caller substitute a
+    translated heading (e.g. the Chinese "推理中…" / "推理（完成）") while
+    keeping this module language-agnostic.
     """
-    label = "Thinking…" if in_progress else "Thinking (done)"
+    if label is None:
+        label = "Thinking…" if in_progress else "Thinking (done)"
     cursor = "▍" if in_progress else ""
     return (
         f'<div class="psa-thinking">'

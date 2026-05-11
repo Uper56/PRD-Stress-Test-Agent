@@ -47,11 +47,194 @@ GOLDEN_DIR = Path(__file__).resolve().parents[1] / "eval" / "golden_prds"
 # We reach severity badges through `severity_badge_html()` so the per-call
 # inline style blob disappears and theme tweaks happen in one place.
 
+
+# ---------------------------------------------------------------------------
+# 中文 UI 文案集中区
+# ---------------------------------------------------------------------------
+# Translation policy (审核基准):
+#   ✅ 翻译: 描述性词汇/动词/section 名/按钮/提示
+#   ❌ 不翻译:
+#       - 缩写 (PRD/API/JSON/HITL/MCP/LLM/SDK)
+#       - 严重度 (P0/P1/P2)
+#       - 角色名 (Critic / Supervisor / Distiller / Curator)
+#       - ML 指标 (Recall / Precision / F1)
+#       - 文件名 / 变量名 / 技术配置 (skill_id, claim_id, injected_into …)
+#       - SKILL.md 内容 / critique 内容 / LLM prompt
+#       - 错误信息中的 raw exception (`{e}`)
+#
+# All UI strings live here so a reviewer can scan one block to verify the
+# translation policy. **Anything not in this dict that's user-facing
+# English is a bug.** Run `grep -nE '"[A-Z][a-z]+ [a-z]+' src/ui/streamlit_app.py`
+# after edits to catch escapees.
+T = {
+    # ---- Hero ---------------------------------------------------------------
+    "title": "PRD Stress Test",
+    "subtitle": "多智能体对抗式 PRD 评审 · Skills 自学习",
+
+    # ---- Tabs ---------------------------------------------------------------
+    "tab_stress_test": "🏠 评审",
+    "tab_ablation": "📊 消融实验",
+
+    # ---- Main input section --------------------------------------------------
+    "input_heading": "输入",
+    "prd_source_label": "PRD 来源",
+    "prd_source_paste": "粘贴文本",
+    "prd_source_golden": "选择内置 PRD",
+    "prd_golden_label": "内置 PRD",
+    "prd_preview": "预览",
+    "prd_paste_label": "粘贴 PRD 全文",
+    "btn_run_stress_test": "开始评审",
+    "btn_reset": "重置",
+    "warn_no_prd": "请先提供 PRD",
+
+    # ---- Run summary --------------------------------------------------------
+    "summary_intake": "Intake 抽取 {claims} 条 claim · Critic 产出 {critiques} 条 finding",
+    "critic_findings_heading": "Critic 评审结果",
+    "no_findings_from_critic": "此 Critic 暂无发现",
+
+    # ---- Critic tab labels (角色名 + 首次出现的中文注释) --------------------
+    "critic_tab_user_advocate": "User Advocate（用户视角）",
+    "critic_tab_engineering": "Engineering（工程视角）",
+    "critic_tab_business": "Business（商业视角）",
+    "critic_tab_design": "Design（设计视角）",
+
+    # ---- Critique card ------------------------------------------------------
+    "critique_evidence_prefix": "**原文依据：** {text}",
+    "critique_fix_prefix": "**建议改进：** {text}",
+    "btn_feedback_useful": "✓ 采纳",
+    "btn_feedback_noise": "✗ 误报",
+    "feedback_recorded_useful": "已记录为 ✓ 采纳 —— 计入 Skill acceptance_rate",
+    "feedback_recorded_noise": "已记录为 ✗ 误报 —— 计入 Skill acceptance_rate",
+    "feedback_failed": "反馈失败：{error}",
+    "btn_discuss_open": "💬 继续追问",
+    "btn_discuss_close": "💬 收起追问",
+
+    # ---- Discussion dialog --------------------------------------------------
+    "dialog_prefix": "继续追问",
+    "dialog_cap_reached": "🛑 已达到追问上限（{max_rounds} 轮）。如需继续请关闭后重开。",
+    "dialog_chat_input_placeholder": "继续追问 {critic_id}…",
+
+    # ---- Cross-challenge ----------------------------------------------------
+    "cross_challenge_heading": "🔀 智能体互辩",
+    "cross_converged": "✅ 第 {rounds} 轮收敛",
+    "cross_not_converged": "⚠️ 达到最大轮数（{rounds}）仍未收敛",
+    "cross_no_challenges": "无互辩 —— 各 Critic 均认可其他人的发现",
+    "cross_round_title": "第 {round} 轮 —— {n} 条互辩",
+
+    # ---- Supervisor section -------------------------------------------------
+    "supervisor_heading": "Supervisor 裁决",
+    "supervisor_thinking_in_progress": "推理中…",
+    "supervisor_thinking_done": "推理（完成）",
+    "verdict_heading": "### 裁决",
+    "verdict_executive_summary": "#### 核心结论",
+    "verdict_p0_blockers": "P0 阻断项",
+    "verdict_p1_concerns": "P1 关注项",
+    "verdict_p2_suggestions": "P2 建议",
+    "verdict_none": "—— 暂无 ——",
+    "verdict_conflicts_heading": "#### 分歧裁决",
+
+    # ---- Run history sidebar ------------------------------------------------
+    "history_heading": "📊 历史记录",
+    "history_load_failed": "历史记录加载失败：{error}",
+    "history_empty": "暂无运行记录 —— 跑一次评审就有了",
+    "history_count": "最近 {n} 条记录",
+    "history_run_title": "{ts} · {filename}",
+    "history_run_filename_default": "自定义输入",
+    "history_run_caption": "P0 {p0} · P1 {p1} · P2 {p2} · 共 {critiques} 条 critique · 命中 Skill {hits} · 未覆盖 {misses}",
+    "history_run_summary": "**核心结论** —— {summary}",
+    "history_critique_details": "Critique 详情",
+
+    # ---- Skill library sidebar ----------------------------------------------
+    "skill_lib_heading": "📚 Skill 库",
+    "skill_lib_load_failed": "Skill 库加载失败：{error}",
+    "skill_lib_caption": "{n} 条启用中 · 遵循 SKILL.md 规范 · 只读",
+    "skill_lib_expander_label": "{name}  ·  使用 {usage} 次",
+    "skill_lib_meta_caption": "injected_into: {routes}  ·  v{version}  ·  by {created_by}  ·  使用 {usage} 次",
+    "btn_show_skill_md": "查看 SKILL.md",
+    "btn_skill_pin": "📌 置顶",
+    "btn_skill_deprecate": "🗑 弃用",
+
+    # ---- Skill distillation sidebar -----------------------------------------
+    "distill_heading": "🧪 Skill 提炼",
+    "distill_history_load_failed": "历史加载失败：{error}",
+    "distill_proposals_load_failed": "提案加载失败：{error}",
+    "distill_stats_caption": "历史共 {runs} 条 · {misses} 条未命中 critique 来自 {miss_runs} 次运行",
+    "btn_run_distiller": "▶️ 提炼新 Skill",
+    "spinner_distill_mining": "正在跨 PRD 挖掘模式…",
+    "distill_failed": "提炼失败：{error}",
+    "btn_distill_clear": "清除",
+    "btn_distill_clear_help": "关闭结果提示",
+    "distill_no_new_candidates": "本次未发现新候选",
+    "distill_found_candidates": "发现 {n} 条候选 Skill",
+    "distill_no_pending": "暂无待审议的提案",
+    "distill_pending_count": "{n} 条待审议提案",
+
+    # ---- Proposal card ------------------------------------------------------
+    "proposal_caption": "freq={freq} 份 PRD · injected_into: {routes}",
+    "proposal_evidence_expander": "📎 证据 ({n} 条)",
+    "proposal_full_md_expander": "📄 完整 SKILL.md",
+    "btn_proposal_approve": "✅ 采纳",
+    "btn_proposal_reject": "❌ 驳回",
+    "btn_proposal_save_edit": "✏️ 保存修改",
+    "proposal_promote_failed": "采纳失败 —— 请查看日志",
+    "proposal_added": "✅ 已加入 Skill 库：{name}",
+    "proposal_approve_failed": "采纳失败：{error}",
+    "proposal_edit_saved": "修改已保存（状态：edited）",
+    "proposal_no_changes": "无修改需保存",
+
+    # ---- Pipeline run -------------------------------------------------------
+    "spinner_critics_running": "4 个 Critic 并行审查中…",
+    "history_save_failed": "历史记录保存失败：{error}",
+
+    # ---- Ablation tab -------------------------------------------------------
+    "ablation_heading": "📊 消融实验结果",
+    "ablation_intro": (
+        "通过在多种检索条件下重跑每份 PRD 并对照预埋缺陷集打分，"
+        "量化 Skill 库对系统的贡献。"
+    ),
+    "ablation_no_report": (
+        "尚无消融报告。点击下方 **重新运行消融实验**，"
+        "或在命令行运行 `python -m src.eval --quick`。"
+    ),
+    "ablation_load_failed": "latest.json 加载失败：{error}",
+    "ablation_rerun_heading": "重新运行消融实验",
+    "ablation_quick_mode_label": "快速模式（每格运行 1 次）",
+    "btn_rerun_ablation": "▶️ 重新运行",
+    "spinner_ablation_running": "消融实验运行中 —— 约需 1 分钟…",
+    "ablation_complete": "消融完成 —— 滚动到顶部查看结果",
+    "ablation_failed": "消融失败：{error}",
+    "ablation_disclaimer": (
+        "数据源：OpenAI gpt-4o-mini（Critics + Supervisor 同模型，"
+        "supervisor 升级到 gpt-4o 为后续工作）· 完整方法论见 README。"
+    ),
+    "ablation_headline_heading": "核心对比：skill_on vs skill_off",
+    "ablation_metric_recall": "缺陷召回率",
+    "ablation_metric_precision": "Precision",
+    "ablation_metric_latency": "平均耗时 (秒)",
+    "ablation_metric_cost": "平均成本 ($)",
+    "ablation_metric_delta_vs_off": "{delta:+.2f} vs OFF",
+    "ablation_comparison_heading": "对比表",
+    "ablation_table_metric_col": "指标",
+    "ablation_row_recall": "缺陷召回率",
+    "ablation_row_precision": "Precision",
+    "ablation_row_structure": "结构合规率",
+    "ablation_row_dependency_recall": "依赖识别召回率",
+    "ablation_row_contradiction": "矛盾检测召回率",
+    "ablation_row_severity_f1": "Severity F1",
+    "ablation_row_actionability": "可执行性",
+    "ablation_row_latency": "平均耗时 (秒)",
+    "ablation_row_cost": "平均成本 ($)",
+    "ablation_row_critiques_per_run": "单次产出数",
+    "ablation_charts_heading": "各实验组对比图",
+    "ablation_meta_caption": "生成于 {ts} · PRD: {n} 份 · 每组运行: {runs}",
+}
+
+
 CRITIC_TABS = [
-    ("user_advocate", "User Advocate"),
-    ("engineering", "Engineering"),
-    ("business", "Business"),
-    ("design", "Design"),
+    ("user_advocate", T["critic_tab_user_advocate"]),
+    ("engineering", T["critic_tab_engineering"]),
+    ("business", T["critic_tab_business"]),
+    ("design", T["critic_tab_design"]),
 ]
 
 
@@ -93,37 +276,37 @@ def _render_critique(c: dict) -> None:
     if skill_id:
         st.markdown(skill_chip_html(skill_id), unsafe_allow_html=True)
 
-    st.markdown(f"**Evidence:** {c.get('evidence', '')}")
-    st.markdown(f"**Suggested fix:** {c.get('suggested_fix', '')}")
+    st.markdown(T["critique_evidence_prefix"].format(text=c.get("evidence", "")))
+    st.markdown(T["critique_fix_prefix"].format(text=c.get("suggested_fix", "")))
 
     # HITL feedback row — only meaningful when a skill_id is attached.
     if skill_id:
         feedback = st.session_state.setdefault("critique_feedback", {})
         already = feedback.get(uid)
         col_yes, col_no, col_status = st.columns([1, 1, 4])
-        if col_yes.button("✓ Useful", key=f"fb_yes_{uid}", disabled=already is not None):
+        if col_yes.button(T["btn_feedback_useful"], key=f"fb_yes_{uid}", disabled=already is not None):
             try:
                 SkillCurator().update_acceptance(skill_id, accepted=True)
                 feedback[uid] = "accepted"
                 st.rerun()
             except Exception as e:  # pragma: no cover
-                st.warning(f"feedback failed: {e}")
-        if col_no.button("✗ Not useful", key=f"fb_no_{uid}", disabled=already is not None):
+                st.warning(T["feedback_failed"].format(error=e))
+        if col_no.button(T["btn_feedback_noise"], key=f"fb_no_{uid}", disabled=already is not None):
             try:
                 SkillCurator().update_acceptance(skill_id, accepted=False)
                 feedback[uid] = "rejected"
                 st.rerun()
             except Exception as e:  # pragma: no cover
-                st.warning(f"feedback failed: {e}")
+                st.warning(T["feedback_failed"].format(error=e))
         if already == "accepted":
-            col_status.success("Recorded as ✓ useful — feeds skill acceptance_rate")
+            col_status.success(T["feedback_recorded_useful"])
         elif already == "rejected":
-            col_status.info("Recorded as ✗ not useful — feeds skill acceptance_rate")
+            col_status.info(T["feedback_recorded_noise"])
 
     # Discuss button — opens a dialog for this critique.
     active = st.session_state.get("active_dialogs", {})
     is_open = uid in active
-    label = "💬 Close discussion" if is_open else "💬 Discuss"
+    label = T["btn_discuss_close"] if is_open else T["btn_discuss_open"]
     if st.button(label, key=f"discuss_btn_{uid}"):
         dialogs = st.session_state.setdefault("active_dialogs", {})
         if is_open:
@@ -153,7 +336,7 @@ def _render_dialog_panel(uid: str, dialog: dict) -> None:
     # garden-skills anti-cliché: no coloured left-border accent.
     # `dialog_panel_open_html` uses a flat surface tint + top-border instead.
     st.markdown(
-        dialog_panel_open_html(dialog["critic_id"]),
+        dialog_panel_open_html(dialog["critic_id"], prefix=T["dialog_prefix"]),
         unsafe_allow_html=True,
     )
 
@@ -168,16 +351,13 @@ def _render_dialog_panel(uid: str, dialog: dict) -> None:
 
     cap_reached = rounds >= MAX_DIALOG_ROUNDS
     if cap_reached:
-        st.info(
-            f"🛑 Discussion cap reached ({MAX_DIALOG_ROUNDS} rounds). "
-            "Close this dialog and open a new one if needed."
-        )
+        st.info(T["dialog_cap_reached"].format(max_rounds=MAX_DIALOG_ROUNDS))
 
     # Input — disabled once cap is hit.
     prompt = None
     if not cap_reached:
         prompt = st.chat_input(
-            f"Ask {dialog['critic_id']} a follow-up…",
+            T["dialog_chat_input_placeholder"].format(critic_id=dialog["critic_id"]),
             key=f"chat_input_{uid}",
         )
 
@@ -225,15 +405,15 @@ def _render_dialog_panel(uid: str, dialog: dict) -> None:
 
 
 def _render_verdict(verdict: dict) -> None:
-    st.markdown("#### Executive summary")
+    st.markdown(T["verdict_executive_summary"])
     st.info(verdict.get("executive_summary", "—"))
 
     # Use the shared severity badge so verdict headings track palette
     # changes from one place (src/ui/styles.py) instead of three.
     groups = [
-        ("P0 Blockers", "p0_blockers", "P0"),
-        ("P1 Concerns", "p1_concerns", "P1"),
-        ("P2 Suggestions", "p2_suggestions", "P2"),
+        (T["verdict_p0_blockers"], "p0_blockers", "P0"),
+        (T["verdict_p1_concerns"], "p1_concerns", "P1"),
+        (T["verdict_p2_suggestions"], "p2_suggestions", "P2"),
     ]
     for label, key, sev in groups:
         items = verdict.get(key, []) or []
@@ -243,14 +423,14 @@ def _render_verdict(verdict: dict) -> None:
             unsafe_allow_html=True,
         )
         if not items:
-            st.caption("— none —")
+            st.caption(T["verdict_none"])
         else:
             for item in items:
                 st.markdown(f"- {item}")
 
     conflicts = verdict.get("conflict_resolutions", []) or []
     if conflicts:
-        st.markdown("#### Conflict resolutions")
+        st.markdown(T["verdict_conflicts_heading"])
         for c in conflicts:
             st.markdown(f"- {c}")
 
@@ -275,7 +455,11 @@ def _stream_supervisor_sync(state: dict, llm, thinking_box) -> tuple[str, dict]:
             if stage == "thinking":
                 thinking_text += event.get("delta", "")
                 thinking_box.markdown(
-                    thinking_html(thinking_text, in_progress=True),
+                    thinking_html(
+                        thinking_text,
+                        in_progress=True,
+                        label=T["supervisor_thinking_in_progress"],
+                    ),
                     unsafe_allow_html=True,
                 )
             elif stage == "done":
@@ -286,7 +470,11 @@ def _stream_supervisor_sync(state: dict, llm, thinking_box) -> tuple[str, dict]:
     # Freeze the thinking placeholder (drop the cursor glyph) once streaming ends.
     if thinking_text:
         thinking_box.markdown(
-            thinking_html(thinking_text, in_progress=False),
+            thinking_html(
+                thinking_text,
+                in_progress=False,
+                label=T["supervisor_thinking_done"],
+            ),
             unsafe_allow_html=True,
         )
     return thinking_text, final_verdict
@@ -301,7 +489,7 @@ def _run_and_cache(prd_text: str, *, prd_filename: str | None = None) -> None:
     """
     llm = MockProvider()
 
-    with st.spinner("Running 4 critics in parallel…"):
+    with st.spinner(T["spinner_critics_running"]):
         state = asyncio.run(
             run_pipeline(prd_text, llm=llm, include_supervisor=False)
         )
@@ -328,7 +516,7 @@ def _run_and_cache(prd_text: str, *, prd_filename: str | None = None) -> None:
     try:
         persist_run(final_state, prd_filename=prd_filename)
     except Exception as e:  # pragma: no cover — defensive
-        st.warning(f"Run history not saved: {e}")
+        st.warning(T["history_save_failed"].format(error=e))
 
     st.session_state["run"] = {
         "prd_text": state.get("prd_text", prd_text),
@@ -350,31 +538,32 @@ def _run_and_cache(prd_text: str, *, prd_filename: str | None = None) -> None:
 def _render_run(run: dict) -> None:
     """Render a completed run from session_state (no LLM work done here)."""
     st.success(
-        f"Intake extracted {run['claim_count']} claims · "
-        f"critics produced {len(run['critiques'])} findings"
+        T["summary_intake"].format(
+            claims=run["claim_count"], critiques=len(run["critiques"])
+        )
     )
 
     by_critic: dict[str, list[dict]] = {k: [] for k, _ in CRITIC_TABS}
     for d in run["critiques"]:
         by_critic.setdefault(d.get("critic_id", "unknown"), []).append(d)
 
-    st.subheader("Critic findings")
+    st.subheader(T["critic_findings_heading"])
     tabs = st.tabs([label for _, label in CRITIC_TABS])
     for (key, _label), tab in zip(CRITIC_TABS, tabs):
         with tab:
             items = by_critic.get(key, [])
             if not items:
-                st.info("No findings from this critic.")
+                st.info(T["no_findings_from_critic"])
             for item in items:
                 _render_critique(item)
 
     # ---- Cross-Challenge section --------------------------------------------
-    st.subheader("🔀 Cross-Challenge")
+    st.subheader(T["cross_challenge_heading"])
     rounds = run["challenge_round"]
     if run["converged"]:
-        st.success(f"✅ Converged after round {rounds}")
+        st.success(T["cross_converged"].format(rounds=rounds))
     else:
-        st.warning(f"⚠️ Reached max rounds ({rounds}) without convergence")
+        st.warning(T["cross_not_converged"].format(rounds=rounds))
 
     challenges_raw = run["challenges"]
     by_round: dict[int, list[dict]] = {}
@@ -382,12 +571,13 @@ def _render_run(run: dict) -> None:
         by_round.setdefault(d.get("round", 0), []).append(d)
 
     if not challenges_raw:
-        st.caption("No challenges raised — all critics accepted each other's findings.")
+        st.caption(T["cross_no_challenges"])
     else:
         for rn in sorted(by_round.keys()):
             items = by_round[rn]
             with st.expander(
-                f"Round {rn} — {len(items)} challenge(s)", expanded=False
+                T["cross_round_title"].format(round=rn, n=len(items)),
+                expanded=False,
             ):
                 for ch in items:
                     st.markdown(
@@ -398,55 +588,75 @@ def _render_run(run: dict) -> None:
                     st.divider()
 
     # ---- Supervisor verdict (cached from the one-time stream) ---------------
-    st.subheader("Supervisor decision")
+    st.subheader(T["supervisor_heading"])
     thinking_text = run.get("thinking_text") or ""
     if thinking_text:
         st.markdown(
-            thinking_html(thinking_text, in_progress=False),
+            thinking_html(
+                thinking_text,
+                in_progress=False,
+                label=T["supervisor_thinking_done"],
+            ),
             unsafe_allow_html=True,
         )
-    st.markdown("### Verdict")
+    st.markdown(T["verdict_heading"])
     _render_verdict(run.get("verdict") or {})
 
 
 def _render_run_history_sidebar() -> None:
     """List the most recent runs persisted to `data/results/history/`."""
-    st.sidebar.header("📊 Run History")
+    st.sidebar.header(T["history_heading"])
     try:
         runs = HistoryStore().list_recent(n=20)
     except Exception as e:  # pragma: no cover
-        st.sidebar.error(f"Failed to load history: {e}")
+        st.sidebar.error(T["history_load_failed"].format(error=e))
         return
 
     if not runs:
-        st.sidebar.caption("No runs yet — kick one off to populate.")
+        st.sidebar.caption(T["history_empty"])
         return
 
-    st.sidebar.caption(f"{len(runs)} most-recent run(s)")
+    st.sidebar.caption(T["history_count"].format(n=len(runs)))
     for r in runs:
         verdict = r.supervisor_verdict or {}
         p0 = len(verdict.get("p0_blockers", []) or [])
         p1 = len(verdict.get("p1_concerns", []) or [])
         p2 = len(verdict.get("p2_suggestions", []) or [])
-        title = (
-            f"{r.timestamp[:19].replace('T',' ')} · "
-            f"{r.prd_filename or 'custom input'}"
+        title = T["history_run_title"].format(
+            ts=r.timestamp[:19].replace("T", " "),
+            filename=r.prd_filename or T["history_run_filename_default"],
         )
         with st.sidebar.expander(title, expanded=False):
             st.caption(
-                f"P0 {p0} · P1 {p1} · P2 {p2}  ·  critiques {len(r.critiques)}"
-                f"  ·  hits {len(r.skill_hits)} · misses {len(r.skill_misses)}"
+                T["history_run_caption"].format(
+                    p0=p0,
+                    p1=p1,
+                    p2=p2,
+                    critiques=len(r.critiques),
+                    hits=len(r.skill_hits),
+                    misses=len(r.skill_misses),
+                )
             )
             if verdict.get("executive_summary"):
-                st.markdown(f"**Summary** — {verdict['executive_summary']}")
-            for label, key in (("P0", "p0_blockers"), ("P1", "p1_concerns"), ("P2", "p2_suggestions")):
+                st.markdown(
+                    T["history_run_summary"].format(
+                        summary=verdict["executive_summary"]
+                    )
+                )
+            # Severity labels (P0/P1/P2) are intentionally kept as-is —
+            # they're the canonical PM vocabulary in both languages.
+            for label, key in (
+                ("P0", "p0_blockers"),
+                ("P1", "p1_concerns"),
+                ("P2", "p2_suggestions"),
+            ):
                 items = verdict.get(key, []) or []
                 if items:
                     st.markdown(f"_{label}_")
                     for item in items:
                         st.markdown(f"- {item}")
             if r.critiques:
-                with st.expander("Critique details", expanded=False):
+                with st.expander(T["history_critique_details"], expanded=False):
                     for c in r.critiques:
                         st.markdown(
                             f"**{c.get('critic_id','?')}** [{c.get('severity','?')}] "
@@ -465,32 +675,33 @@ def _render_distillation_panel() -> None:
     Shows recent history stats, a Run Distiller button, and a card per
     pending proposal with Approve / Reject / Edit affordances.
     """
-    st.sidebar.header("🧪 Skill Distillation")
+    st.sidebar.header(T["distill_heading"])
 
     try:
         history = HistoryStore()
         runs = history.list_recent(n=10_000)
         miss_runs = history.query(only_misses=True)
     except Exception as e:  # pragma: no cover
-        st.sidebar.error(f"Failed to load history: {e}")
+        st.sidebar.error(T["distill_history_load_failed"].format(error=e))
         return
 
     miss_critiques = sum(
         sum(1 for c in r.critiques if not c.get("skill_id")) for r in miss_runs
     )
     st.sidebar.caption(
-        f"{len(runs)} run(s) in history · {miss_critiques} unhit critiques across "
-        f"{len(miss_runs)} run(s)"
+        T["distill_stats_caption"].format(
+            runs=len(runs), misses=miss_critiques, miss_runs=len(miss_runs)
+        )
     )
 
     col_run, col_clear = st.sidebar.columns([2, 1])
     if col_run.button(
-        "▶️ Run Distiller",
+        T["btn_run_distiller"],
         key="run_distiller_btn",
         use_container_width=True,
     ):
         with st.sidebar:
-            with st.spinner("Mining cross-PRD patterns…"):
+            with st.spinner(T["spinner_distill_mining"]):
                 try:
                     proposals = asyncio.run(run_distiller(MockProvider(), history))
                     store = ProposalsStore()
@@ -498,33 +709,37 @@ def _render_distillation_panel() -> None:
                         store.save(p)
                     st.session_state["last_distill_count"] = len(proposals)
                 except Exception as e:  # pragma: no cover
-                    st.error(f"Distiller failed: {e}")
+                    st.error(T["distill_failed"].format(error=e))
                     return
         st.rerun()
 
-    if col_clear.button("Clear", key="clear_distill_btn", help="dismiss the result banner"):
+    if col_clear.button(
+        T["btn_distill_clear"],
+        key="clear_distill_btn",
+        help=T["btn_distill_clear_help"],
+    ):
         st.session_state.pop("last_distill_count", None)
         st.rerun()
 
     last = st.session_state.get("last_distill_count")
     if last is not None:
         if last == 0:
-            st.sidebar.info("No new candidates this run.")
+            st.sidebar.info(T["distill_no_new_candidates"])
         else:
-            st.sidebar.success(f"Found {last} candidate skill(s).")
+            st.sidebar.success(T["distill_found_candidates"].format(n=last))
 
     # ---- Pending proposals -------------------------------------------------
     try:
         pending = ProposalsStore().list_pending()
     except Exception as e:  # pragma: no cover
-        st.sidebar.error(f"Failed to load proposals: {e}")
+        st.sidebar.error(T["distill_proposals_load_failed"].format(error=e))
         return
 
     if not pending:
-        st.sidebar.caption("No pending proposals.")
+        st.sidebar.caption(T["distill_no_pending"])
         return
 
-    st.sidebar.caption(f"{len(pending)} pending proposal(s)")
+    st.sidebar.caption(T["distill_pending_count"].format(n=len(pending)))
     for p in pending:
         _render_proposal_card(p)
 
@@ -538,8 +753,10 @@ def _render_proposal_card(proposal) -> None:
         # Pull description out of the SKILL.md frontmatter for the summary.
         desc = _frontmatter_field(proposal.proposed_skill_md, "description") or "—"
         st.caption(
-            f"freq={proposal.pattern_frequency} PRDs · "
-            f"injected_into: {', '.join(proposal.injected_into)}"
+            T["proposal_caption"].format(
+                freq=proposal.pattern_frequency,
+                routes=", ".join(proposal.injected_into),
+            )
         )
         st.write(desc)
         st.progress(min(max(score, 0.0), 1.0))
@@ -547,15 +764,17 @@ def _render_proposal_card(proposal) -> None:
         # Evidence — collapsible list of (run_id, critique_excerpt).
         if proposal.evidence:
             with st.expander(
-                f"📎 Evidence ({len(proposal.evidence)} rows)", expanded=False
+                T["proposal_evidence_expander"].format(n=len(proposal.evidence)),
+                expanded=False,
             ):
                 for ev in proposal.evidence:
                     st.markdown(
                         f"`{ev.get('run_id','?')[:12]}` — {ev.get('critique_excerpt','')}"
                     )
 
-        # Full SKILL.md preview / edit.
-        with st.expander("📄 Full SKILL.md", expanded=False):
+        # Full SKILL.md preview / edit. The text_area label stays "SKILL.md"
+        # — that's the canonical Anthropic spec filename, not a UI string.
+        with st.expander(T["proposal_full_md_expander"], expanded=False):
             edit_key = f"edit_md_{proposal.proposal_id}"
             edited = st.text_area(
                 "SKILL.md",
@@ -565,7 +784,7 @@ def _render_proposal_card(proposal) -> None:
             )
 
         col_a, col_r, col_e = st.columns(3)
-        if col_a.button("✅ Approve", key=f"approve_{proposal.proposal_id}"):
+        if col_a.button(T["btn_proposal_approve"], key=f"approve_{proposal.proposal_id}"):
             try:
                 # Persist any pending edits first, then promote.
                 if (
@@ -576,25 +795,25 @@ def _render_proposal_card(proposal) -> None:
                     )
                 path = ProposalsStore().promote_to_skill(proposal.proposal_id)
                 if path is None:
-                    st.error("Promotion failed — see logs.")
+                    st.error(T["proposal_promote_failed"])
                 else:
-                    st.success(f"✅ Skill added: {proposal.proposed_name}")
+                    st.success(T["proposal_added"].format(name=proposal.proposed_name))
                     st.rerun()
             except Exception as e:  # pragma: no cover
-                st.error(f"approve failed: {e}")
-        if col_r.button("❌ Reject", key=f"reject_{proposal.proposal_id}"):
+                st.error(T["proposal_approve_failed"].format(error=e))
+        if col_r.button(T["btn_proposal_reject"], key=f"reject_{proposal.proposal_id}"):
             ProposalsStore().update_status(proposal.proposal_id, "rejected")
             st.rerun()
-        if col_e.button("✏️ Save edit", key=f"save_edit_{proposal.proposal_id}"):
+        if col_e.button(T["btn_proposal_save_edit"], key=f"save_edit_{proposal.proposal_id}"):
             edited_now = st.session_state.get(f"edit_md_{proposal.proposal_id}")
             if edited_now and edited_now != proposal.proposed_skill_md:
                 ProposalsStore().update_status(
                     proposal.proposal_id, "edited", edited_md=edited_now
                 )
-                st.success("Edit saved (status: edited).")
+                st.success(T["proposal_edit_saved"])
                 st.rerun()
             else:
-                st.info("No changes to save.")
+                st.info(T["proposal_no_changes"])
 
 
 def _frontmatter_field(skill_md: str, field: str) -> str | None:
@@ -623,32 +842,34 @@ def _render_skill_library_sidebar() -> None:
     the same tool surface the MCP server will expose — swapping to a
     transport-backed client later touches one import line.
     """
-    st.sidebar.header("📚 Skill Library")
+    st.sidebar.header(T["skill_lib_heading"])
     try:
         skills = list_skills(status="active")
     except Exception as e:  # pragma: no cover — defensive
-        st.sidebar.error(f"Failed to load library: {e}")
+        st.sidebar.error(T["skill_lib_load_failed"].format(error=e))
         return
 
-    st.sidebar.caption(
-        f"{len(skills)} active skill(s) · SKILL.md spec · read-only"
-    )
+    st.sidebar.caption(T["skill_lib_caption"].format(n=len(skills)))
 
     for s in skills:
         name = s.get("name") or s.get("id")
         usage = int(s.get("usage_count", 0) or 0)
-        header_label = f"{name}  ·  used {usage}×"
-        with st.sidebar.expander(header_label, expanded=False):
+        with st.sidebar.expander(
+            T["skill_lib_expander_label"].format(name=name, usage=usage),
+            expanded=False,
+        ):
             st.caption(
-                f"injected_into: {', '.join(s.get('injected_into', [])) or '—'}"
-                f"  ·  v{s.get('version', '1.0')}"
-                f"  ·  by {s.get('created_by', '?')}"
-                f"  ·  used {usage}×"
+                T["skill_lib_meta_caption"].format(
+                    routes=", ".join(s.get("injected_into", [])) or "—",
+                    version=s.get("version", "1.0"),
+                    created_by=s.get("created_by", "?"),
+                    usage=usage,
+                )
             )
             st.write(s.get("description", ""))
 
             # On-demand: load and render the raw SKILL.md (frontmatter + body).
-            if st.button("Show SKILL.md", key=f"skill_body_{name}"):
+            if st.button(T["btn_show_skill_md"], key=f"skill_body_{name}"):
                 st.session_state[f"skill_body_open_{name}"] = True
             if st.session_state.get(f"skill_body_open_{name}"):
                 try:
@@ -666,44 +887,39 @@ def _render_skill_library_sidebar() -> None:
 
             # Curator actions — Day 9 wiring placeholders.
             col_a, col_b = st.columns(2)
-            col_a.button("📌 Pin", key=f"pin_{name}", disabled=True)
-            col_b.button("🗑 Deprecate", key=f"dep_{name}", disabled=True)
+            col_a.button(T["btn_skill_pin"], key=f"pin_{name}", disabled=True)
+            col_b.button(T["btn_skill_deprecate"], key=f"dep_{name}", disabled=True)
 
 
 def _render_ablation_tab() -> None:
     """📊 Ablation Results — load `data/results/ablation/latest.json` and render
     a four-card headline + comparison table + bar chart.
     """
-    st.header("📊 Ablation Results")
-    st.caption(
-        "Quantifies the contribution of the Skill Library by re-running each "
-        "PRD under multiple retrieval treatments and scoring against the "
-        "golden defect manifest."
-    )
+    st.header(T["ablation_heading"])
+    st.caption(T["ablation_intro"])
 
     latest = ABLATION_OUTPUT_DIR / "latest.json"
     if not latest.exists():
-        st.info(
-            "No ablation report on disk yet. Click **Re-run Ablation** below "
-            "or run `python -m src.eval --quick` from the command line."
-        )
+        st.info(T["ablation_no_report"])
     else:
         try:
             report = json.loads(latest.read_text(encoding="utf-8"))
         except Exception as e:  # pragma: no cover
-            st.error(f"Failed to load latest.json: {e}")
+            st.error(T["ablation_load_failed"].format(error=e))
             report = None
         if report:
             _render_ablation_body(report)
 
     st.divider()
-    st.subheader("Re-run Ablation")
+    st.subheader(T["ablation_rerun_heading"])
     col_a, col_b = st.columns([1, 1])
     quick = col_a.checkbox(
-        "Quick mode (1 run / cell)", value=True, key="ablation_quick"
+        T["ablation_quick_mode_label"], value=True, key="ablation_quick"
     )
-    if col_b.button("▶️ Re-run Ablation", type="primary", key="ablation_run_btn"):
-        with st.spinner("Running ablation sweep — this can take ~1 minute…"):
+    if col_b.button(
+        T["btn_rerun_ablation"], type="primary", key="ablation_run_btn"
+    ):
+        with st.spinner(T["spinner_ablation_running"]):
             try:
                 treatments = [
                     AblationConfig.preset(n)
@@ -721,16 +937,12 @@ def _render_ablation_tab() -> None:
                         output_dir=ABLATION_OUTPUT_DIR,
                     )
                 )
-                st.success("Ablation complete — refresh / scroll up to see results.")
+                st.success(T["ablation_complete"])
             except Exception as e:  # pragma: no cover
-                st.error(f"Ablation failed: {e}")
+                st.error(T["ablation_failed"].format(error=e))
         st.rerun()
 
-    st.caption(
-        "Disclaimer: numbers above come from MockProvider — they validate the "
-        "ablation pipeline, not real LLM behaviour. Rerun against OpenAI when "
-        "the API key arrives."
-    )
+    st.caption(T["ablation_disclaimer"])
 
 
 def _render_ablation_body(report: dict) -> None:
@@ -746,40 +958,41 @@ def _render_ablation_body(report: dict) -> None:
         off = on = treatments[0] if treatments else None
 
     if on and off and on != off:
-        st.subheader("Headline: skill_on vs skill_off")
+        st.subheader(T["ablation_headline_heading"])
         cols = st.columns(4)
-        for col, label, key, fmt in zip(
-            cols,
-            ("Defect Recall", "Precision", "Avg Latency (s)", "Avg Cost ($)"),
-            ("overall_recall", "precision", "latency_seconds", "cost_usd_estimate"),
-            ("{:.2f}", "{:.2f}", "{:.2f}", "{:.3f}"),
-        ):
+        headline_specs = (
+            (T["ablation_metric_recall"], "overall_recall", "{:.2f}"),
+            (T["ablation_metric_precision"], "precision", "{:.2f}"),
+            (T["ablation_metric_latency"], "latency_seconds", "{:.2f}"),
+            (T["ablation_metric_cost"], "cost_usd_estimate", "{:.3f}"),
+        )
+        for col, (label, key, fmt) in zip(cols, headline_specs):
             on_v = aggregated.get(on, {}).get(f"{key}_mean", 0.0)
             off_v = aggregated.get(off, {}).get(f"{key}_mean", 0.0)
             delta = on_v - off_v
             col.metric(
                 label,
                 fmt.format(on_v),
-                f"{delta:+.2f} vs OFF",
+                T["ablation_metric_delta_vs_off"].format(delta=delta),
             )
 
     # ---- Headline comparison table ----------------------------------------
-    st.subheader("Comparison Table")
+    st.subheader(T["ablation_comparison_heading"])
     rows = [
-        ("Defect Recall", "overall_recall", "{:.2f}"),
-        ("Precision", "precision", "{:.2f}"),
-        ("Structure Compliance", "structure_compliance", "{:.2f}"),
-        ("Dependency Recall", "dependency_recall", "{:.2f}"),
-        ("Contradiction Detection", "contradiction_detection", "{:.2f}"),
-        ("Severity F1", "severity_classification_f1", "{:.2f}"),
-        ("Actionability", "actionability", "{:.2f}"),
-        ("Avg Latency (s)", "latency_seconds", "{:.2f}"),
-        ("Avg Cost ($)", "cost_usd_estimate", "{:.3f}"),
-        ("Critiques per Run", "critique_count", "{:.1f}"),
+        (T["ablation_row_recall"], "overall_recall", "{:.2f}"),
+        (T["ablation_row_precision"], "precision", "{:.2f}"),
+        (T["ablation_row_structure"], "structure_compliance", "{:.2f}"),
+        (T["ablation_row_dependency_recall"], "dependency_recall", "{:.2f}"),
+        (T["ablation_row_contradiction"], "contradiction_detection", "{:.2f}"),
+        (T["ablation_row_severity_f1"], "severity_classification_f1", "{:.2f}"),
+        (T["ablation_row_actionability"], "actionability", "{:.2f}"),
+        (T["ablation_row_latency"], "latency_seconds", "{:.2f}"),
+        (T["ablation_row_cost"], "cost_usd_estimate", "{:.3f}"),
+        (T["ablation_row_critiques_per_run"], "critique_count", "{:.1f}"),
     ]
     table_rows = []
     for label, key, fmt in rows:
-        row = {"Metric": label}
+        row = {T["ablation_table_metric_col"]: label}
         for t in treatments:
             row[t] = fmt.format(
                 aggregated.get(t, {}).get(f"{key}_mean", 0.0)
@@ -788,12 +1001,12 @@ def _render_ablation_body(report: dict) -> None:
     st.table(table_rows)
 
     # ---- Bar charts --------------------------------------------------------
-    st.subheader("Per-treatment Bar Charts")
+    st.subheader(T["ablation_charts_heading"])
     chart_metrics = (
-        ("Defect Recall", "overall_recall"),
-        ("Precision", "precision"),
-        ("Avg Latency (s)", "latency_seconds"),
-        ("Avg Cost ($)", "cost_usd_estimate"),
+        (T["ablation_metric_recall"], "overall_recall"),
+        (T["ablation_metric_precision"], "precision"),
+        (T["ablation_metric_latency"], "latency_seconds"),
+        (T["ablation_metric_cost"], "cost_usd_estimate"),
     )
     for label, key in chart_metrics:
         data = {
@@ -804,29 +1017,31 @@ def _render_ablation_body(report: dict) -> None:
 
     # ---- Metadata ----------------------------------------------------------
     st.caption(
-        f"Generated {report.get('timestamp','?')}  ·  "
-        f"PRDs: {len(report.get('prds_used', []))}  ·  "
-        f"runs/treatment: {report.get('runs_per_treatment', 1)}"
+        T["ablation_meta_caption"].format(
+            ts=report.get("timestamp", "?"),
+            n=len(report.get("prds_used", [])),
+            runs=report.get("runs_per_treatment", 1),
+        )
     )
 
 
 def main() -> None:
-    st.set_page_config(page_title="PRD Stress Test", layout="wide")
+    st.set_page_config(page_title=T["title"], layout="wide")
     # Global visual system — Modern tech / blue-violet preset, OKLCH-based.
     # Must run before any st.markdown that styles itself, so it's the very
     # first call after set_page_config.
     inject_global_css()
-    st.title("PRD Stress Test")
-    # `st.html()` because Streamlit's markdown sanitiser strips the
-    # styled <span> we want here (since ~1.33). Same reason as
-    # inject_global_css uses st.html for the <style> block.
-    st.html(compliance_badge_block_html("Anthropic Agent Skills v1.0 · compliant"))
+    st.title(T["title"])
+    # Subtitle replaces the compliance badge (per the Chinese-UI brief,
+    # the badge was redundant chrome). `st.html` because Streamlit's
+    # markdown sanitiser strips styled spans (since ~1.33).
+    st.html(compliance_badge_block_html(T["subtitle"]))
 
     _render_run_history_sidebar()
     _render_skill_library_sidebar()
     _render_distillation_panel()
 
-    page = st.tabs(["🏠 Stress Test", "📊 Ablation Results"])
+    page = st.tabs([T["tab_stress_test"], T["tab_ablation"]])
 
     with page[1]:
         _render_ablation_tab()
@@ -838,43 +1053,42 @@ def main() -> None:
 def _render_main_tab() -> None:
     golden = _load_golden_prds()
 
-    st.subheader("Input")
+    st.subheader(T["input_heading"])
     # Stable explicit keys are mandatory: without them Streamlit identifies
     # widgets by (type, label, script-position). The sidebar grows as
     # proposals come in, which can shift this widget's position and reset
-    # the radio back to its default ("Paste text") on every Run Distiller
-    # rerun. Explicit keys persist state across reruns regardless of layout.
+    # the radio back to its default on every Run Distiller rerun.
     source = st.radio(
-        "PRD source",
-        ["Paste text", "Pick a golden PRD"],
+        T["prd_source_label"],
+        [T["prd_source_paste"], T["prd_source_golden"]],
         horizontal=True,
         key="prd_source_choice",
     )
 
     prd_text = ""
     prd_filename: str | None = None
-    if source == "Pick a golden PRD" and golden:
+    if source == T["prd_source_golden"] and golden:
         choice = st.selectbox(
-            "Golden PRD", list(golden.keys()), key="prd_golden_choice"
+            T["prd_golden_label"], list(golden.keys()), key="prd_golden_choice"
         )
         prd_text = golden[choice]
         prd_filename = choice
-        st.expander("Preview").code(prd_text, language="markdown")
+        st.expander(T["prd_preview"]).code(prd_text, language="markdown")
     else:
         prd_text = st.text_area(
-            "Paste your PRD here", height=300, key="prd_paste_text"
+            T["prd_paste_label"], height=300, key="prd_paste_text"
         )
 
     col_run, col_reset = st.columns([1, 1])
-    if col_run.button("Run Stress Test", type="primary"):
+    if col_run.button(T["btn_run_stress_test"], type="primary"):
         if not prd_text.strip():
-            st.warning("Please provide a PRD first.")
+            st.warning(T["warn_no_prd"])
             return
         # Clear any stale dialogs from a previous run before caching the new one.
         st.session_state["active_dialogs"] = {}
         _run_and_cache(prd_text, prd_filename=prd_filename)
 
-    if col_reset.button("Reset"):
+    if col_reset.button(T["btn_reset"]):
         for k in ("run", "active_dialogs", "prd_text", "dialog_llm"):
             st.session_state.pop(k, None)
         st.rerun()
