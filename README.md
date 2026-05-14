@@ -4,12 +4,6 @@
 
 `Anthropic Agent Skills v1.0 compliant` · `LangGraph` · `MCP` · `gpt-4o-mini`
 
-![main UI](docs/screenshots/main.png)
-
-## What it does
-
-Drop in a PRD; four parallel critic agents (User Advocate / Engineering / Business / Design) tear it apart, push back on each other's findings for up to two rounds, and a Supervisor synthesises a P0/P1/P2 verdict you can act on. Every critic is biased by a **Skill Library** — kebab-named `SKILL.md` folders that codify cross-PRD review heuristics — and a **Distiller** mines the run-history for missed patterns and proposes new skills under human approval.
-
 ## Headline numbers
 
 Validated on 5 hand-crafted PRDs with 22 known defects. Both critics and supervisor run **gpt-4o-mini**; promoting the supervisor to gpt-4o is tracked as future work.
@@ -32,7 +26,11 @@ Validated on 5 hand-crafted PRDs with 22 known defects. Both critics and supervi
 | Latency (s)   | 33.9 ± 2.0         | 29.0 ± 2.3              | 30.1 ± 2.7              |
 | Critiques/run | 17.0 ± 1.4         | **9.0 ± 0.0**           | 10.7 ± 0.9              |
 
-![ablation UI](docs/screenshots/ablation.png)
+## Quick demo
+
+Drop a PRD into the UI; four parallel critics review it, push back on each other for up to two rounds, and a Supervisor delivers a P0/P1/P2 verdict — Chinese-first UI, English technical terms.
+
+🌐 **Live demo**: [TBD — HF Space link will land here after deployment]
 
 ### Three findings worth flagging
 

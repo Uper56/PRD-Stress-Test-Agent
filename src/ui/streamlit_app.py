@@ -31,6 +31,13 @@ from src.main import persist_run, run_pipeline
 from src.skills.curator import SkillCurator
 from src.skills.mcp_client import list_skills, read_skill_md
 from src.storage import HistoryStore, ProposalsStore
+from src.ui.rate_limit import (
+    GLOBAL_PER_DAY as RATE_GLOBAL_PER_DAY,
+    PER_IP_PER_HOUR as RATE_PER_IP_PER_HOUR,
+    check as rate_check,
+    consume as rate_consume,
+    detect_ip,
+)
 from src.ui.styles import (
     compliance_badge_block_html,
     dialog_panel_open_html,
@@ -185,6 +192,21 @@ T = {
     # ---- Pipeline run -------------------------------------------------------
     "spinner_critics_running": "4 个 Critic 并行审查中…",
     "history_save_failed": "历史记录保存失败：{error}",
+
+    # ---- Demo deployment banner + rate limit --------------------------------
+    "demo_banner": (
+        "🎯 Demo deployment · 今日共享额度 {per_day} 次 · "
+        "今日剩余 {remaining_global} 次 · 本 IP 本小时剩余 {remaining_ip} 次 · "
+        "详情见 [GitHub](https://github.com/Uper56/PRD-Stress-Test-Agent)"
+    ),
+    "rate_limit_global_exhausted": (
+        "🛑 今日额度已用尽（共 {per_day} 次/天），请明天再试。"
+        "想本地无限制运行？克隆仓库后跑 `streamlit run app.py` 即可。"
+    ),
+    "rate_limit_ip_exhausted": (
+        "⏳ 本 IP 本小时已达 {per_hour} 次上限，请稍后再试。"
+        "（这是 Demo 配额，本地运行无此限制）"
+    ),
 
     # ---- Ablation tab -------------------------------------------------------
     "ablation_heading": "📊 消融实验结果",
@@ -1025,6 +1047,29 @@ def _render_ablation_body(report: dict) -> None:
     )
 
 
+def _render_demo_banner() -> None:
+    """Show the demo-quota banner if rate limiting is active.
+
+    `rate_check` is non-mutating — it just inspects the counters and
+    reports remaining headroom. The actual debit happens in the Run
+    button handler via `rate_consume`.
+    """
+    decision = rate_check(detect_ip())
+    if decision.reason == "ok" and decision.remaining_global == RATE_GLOBAL_PER_DAY \
+            and decision.remaining_ip == RATE_PER_IP_PER_HOUR:
+        # Likely RATE_LIMIT_DISABLED=1 (local dev). Don't render the banner.
+        # Also true on the very first request of a fresh process — but
+        # then the banner still adds noise without value, so skip.
+        return
+    st.info(
+        T["demo_banner"].format(
+            per_day=RATE_GLOBAL_PER_DAY,
+            remaining_global=decision.remaining_global,
+            remaining_ip=decision.remaining_ip,
+        )
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title=T["title"], layout="wide")
     # Global visual system — Modern tech / blue-violet preset, OKLCH-based.
@@ -1036,6 +1081,11 @@ def main() -> None:
     # the badge was redundant chrome). `st.html` because Streamlit's
     # markdown sanitiser strips styled spans (since ~1.33).
     st.html(compliance_badge_block_html(T["subtitle"]))
+
+    # Demo-deployment banner — only meaningful when rate limiting is on
+    # (i.e. RATE_LIMIT_DISABLED unset). For local dev this surfaces the
+    # default 50/day cap, which is honest signal.
+    _render_demo_banner()
 
     _render_run_history_sidebar()
     _render_skill_library_sidebar()
@@ -1083,6 +1133,25 @@ def _render_main_tab() -> None:
     if col_run.button(T["btn_run_stress_test"], type="primary"):
         if not prd_text.strip():
             st.warning(T["warn_no_prd"])
+            return
+        # Rate-limit gate — debits both per-IP and global counters
+        # atomically. On exhaustion we show the i18n-localised limit
+        # message and refuse to invoke the pipeline (which is the only
+        # path that costs $ on the demo).
+        decision = rate_consume(detect_ip())
+        if not decision.allowed:
+            if decision.reason == "global":
+                st.error(
+                    T["rate_limit_global_exhausted"].format(
+                        per_day=RATE_GLOBAL_PER_DAY
+                    )
+                )
+            else:
+                st.error(
+                    T["rate_limit_ip_exhausted"].format(
+                        per_hour=RATE_PER_IP_PER_HOUR
+                    )
+                )
             return
         # Clear any stale dialogs from a previous run before caching the new one.
         st.session_state["active_dialogs"] = {}
