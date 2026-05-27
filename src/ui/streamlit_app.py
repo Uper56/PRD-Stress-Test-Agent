@@ -19,6 +19,7 @@ import json
 from src.agents.critique_dialog import MAX_DIALOG_ROUNDS, run_critique_dialog
 from src.agents.skill_distiller import run_distiller
 from src.agents.supervisor import run_supervisor_stream
+from src.config import get_critic_llm
 from src.eval.ablation import (
     AblationConfig,
     DEFAULT_OUTPUT_DIR as ABLATION_OUTPUT_DIR,
@@ -26,7 +27,7 @@ from src.eval.ablation import (
     run_ablation,
 )
 from src.graph.state import Critique
-from src.llm.mock_provider import MockProvider
+from src.llm.mock_provider import MockProvider  # noqa: F401 — fallback if config fails
 from src.main import persist_run, run_pipeline
 from src.skills.curator import SkillCurator
 from src.skills.mcp_client import list_skills, read_skill_md
@@ -214,9 +215,12 @@ T = {
 
     # ---- Demo deployment banner + rate limit --------------------------------
     "demo_banner": (
-        "🎯 Demo deployment · 今日共享额度 {per_day} 次 · "
+        "🎯 Demo deployment · 模型 `{model}` · 今日共享额度 {per_day} 次 · "
         "今日剩余 {remaining_global} 次 · 本 IP 本小时剩余 {remaining_ip} 次 · "
         "详情见 [GitHub](https://github.com/Uper56/PRD-Stress-Test-Agent)"
+    ),
+    "local_dev_banner": (
+        "🛠️ 本地开发模式 · 模型 `{model}` · 速率限制已关闭"
     ),
     "rate_limit_global_exhausted": (
         "🛑 今日额度已用尽（共 {per_day} 次/天），请明天再试。"
@@ -417,7 +421,10 @@ def _render_dialog_panel(uid: str, dialog: dict) -> None:
         )
         prd_text = st.session_state.get("prd_text", "")
 
-        placeholder_llm = st.session_state.get("dialog_llm") or MockProvider()
+        # Dialog LLM: same provider as the critics. Cached in session_state
+        # so the same `OpenAIProvider` instance is reused across turns
+        # (avoids re-constructing the async client on every chat_input).
+        placeholder_llm = st.session_state.get("dialog_llm") or get_critic_llm()
         st.session_state["dialog_llm"] = placeholder_llm
 
         with st.chat_message("assistant"):
@@ -528,7 +535,12 @@ def _run_and_cache(prd_text: str, *, prd_filename: str | None = None) -> None:
     (buttons, chat_input, rerun). Without this cache, clicking "💬 Discuss"
     would re-run the LLM pipeline and wipe the supervisor's streamed verdict.
     """
-    llm = MockProvider()
+    # Honour `LLM_PROVIDER` from .env / HF Space secrets — this is what
+    # was missing before: the UI hard-coded MockProvider regardless of
+    # config, so the deployed Space silently returned canned critiques.
+    # `get_critic_llm()` returns MockProvider locally (when LLM_PROVIDER=mock,
+    # the default in .env.example) and OpenAIProvider when LLM_PROVIDER=openai.
+    llm = get_critic_llm()
 
     with st.spinner(T["spinner_critics_running"]):
         state = asyncio.run(
@@ -572,7 +584,7 @@ def _run_and_cache(prd_text: str, *, prd_filename: str | None = None) -> None:
     # PRD text also top-level so the dialog module can read it without digging.
     st.session_state["prd_text"] = state.get("prd_text", prd_text)
     # Dedicated LLM for dialogs — does not share call_log with the pipeline.
-    st.session_state.setdefault("dialog_llm", MockProvider())
+    st.session_state.setdefault("dialog_llm", get_critic_llm())
     st.session_state.setdefault("active_dialogs", {})
 
 
@@ -763,7 +775,9 @@ def _render_distillation_panel() -> None:
         with st.sidebar:
             with st.spinner(T["spinner_distill_mining"]):
                 try:
-                    proposals = asyncio.run(run_distiller(MockProvider(), history))
+                    proposals = asyncio.run(
+                        run_distiller(get_critic_llm(), history)
+                    )
                     store = ProposalsStore()
                     for p in proposals:
                         store.save(p)
@@ -1102,21 +1116,37 @@ def _render_ablation_body(report: dict) -> None:
 
 
 def _render_demo_banner() -> None:
-    """Show the demo-quota banner if rate limiting is active.
+    """Show the demo-quota + live-model banner.
 
-    `rate_check` is non-mutating — it just inspects the counters and
-    reports remaining headroom. The actual debit happens in the Run
-    button handler via `rate_consume`.
+    Two shapes:
+      - Full demo banner (model + quota numbers) when rate limiting is on,
+        i.e. the HF Space deployment.
+      - Local-dev banner (just the model) when rate limiting is disabled,
+        so you can still tell at a glance whether you're on Mock or OpenAI.
     """
+    import os as _os
+
+    # Cheap way to figure out which provider is live without constructing it
+    # again — read the env var directly. Matches src/config.py:PROVIDER.
+    provider = (_os.getenv("LLM_PROVIDER", "mock") or "mock").lower()
+    if provider == "openai":
+        model = _os.getenv("OPENAI_CRITIC_MODEL", "gpt-4o-mini")
+    else:
+        model = "MockProvider"
+
     decision = rate_check(detect_ip())
-    if decision.reason == "ok" and decision.remaining_global == RATE_GLOBAL_PER_DAY \
-            and decision.remaining_ip == RATE_PER_IP_PER_HOUR:
-        # Likely RATE_LIMIT_DISABLED=1 (local dev). Don't render the banner.
-        # Also true on the very first request of a fresh process — but
-        # then the banner still adds noise without value, so skip.
+    if (
+        decision.reason == "ok"
+        and decision.remaining_global == RATE_GLOBAL_PER_DAY
+        and decision.remaining_ip == RATE_PER_IP_PER_HOUR
+    ):
+        # Local dev — rate limiting off / first request. Still surface
+        # the active model so it's obvious whether you're on Mock or real.
+        st.caption(T["local_dev_banner"].format(model=model))
         return
     st.info(
         T["demo_banner"].format(
+            model=model,
             per_day=RATE_GLOBAL_PER_DAY,
             remaining_global=decision.remaining_global,
             remaining_ip=decision.remaining_ip,
