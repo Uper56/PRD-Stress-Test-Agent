@@ -30,7 +30,7 @@ Validated on 5 hand-crafted PRDs with 22 known defects. Both critics and supervi
 
 Drop a PRD into the UI; four parallel critics review it, push back on each other for up to two rounds, and a Supervisor delivers a P0/P1/P2 verdict — Chinese-first UI, English technical terms.
 
-🌐 **Live demo**: [TBD — HF Space link will land here after deployment]
+🌐 **Live demo**: [huggingface.co/spaces/DogTornado/PRD-Stress-Test](https://huggingface.co/spaces/DogTornado/PRD-Stress-Test) — Chinese-first UI, 50 runs/day shared quota.
 
 ### Three findings worth flagging
 
