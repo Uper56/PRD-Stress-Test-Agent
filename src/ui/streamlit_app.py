@@ -694,8 +694,14 @@ def _render_run_history_sidebar() -> None:
 
             # Dev-tier details: P2 list, per-critique critic ownership +
             # Skill attribution, and the critique/hits/misses count line.
-            # Folded by default but still here for the curious PM.
-            with st.expander(T["history_more_details"], expanded=False):
+            # Streamlit forbids nested expanders, so we use a toggle here
+            # (same affordance, no DOM violation).
+            show_more = st.toggle(
+                T["history_more_details"],
+                key=f"hist_more_{r.run_id}",
+                value=False,
+            )
+            if show_more:
                 st.caption(
                     T["history_details_meta"].format(
                         critiques=len(r.critiques),
@@ -815,21 +821,29 @@ def _render_proposal_card(proposal) -> None:
         st.write(desc)
         st.progress(min(max(score, 0.0), 1.0))
 
-        # Evidence — collapsible list of (run_id, critique_excerpt).
+        # Evidence — toggled, not nested expander (Streamlit forbids nesting).
         if proposal.evidence:
-            with st.expander(
+            show_evidence = st.toggle(
                 T["proposal_evidence_expander"].format(n=len(proposal.evidence)),
-                expanded=False,
-            ):
+                key=f"prop_ev_{proposal.proposal_id}",
+                value=False,
+            )
+            if show_evidence:
                 for ev in proposal.evidence:
                     st.markdown(
                         f"`{ev.get('run_id','?')[:12]}` — {ev.get('critique_excerpt','')}"
                     )
 
-        # Full SKILL.md preview / edit. The text_area label stays "SKILL.md"
-        # — that's the canonical Anthropic spec filename, not a UI string.
-        with st.expander(T["proposal_full_md_expander"], expanded=False):
-            edit_key = f"edit_md_{proposal.proposal_id}"
+        # Full SKILL.md preview / edit. Same nesting constraint applies —
+        # use a toggle here too. The text_area label stays "SKILL.md"
+        # (the canonical Anthropic spec filename, not a UI string).
+        show_md = st.toggle(
+            T["proposal_full_md_expander"],
+            key=f"prop_md_{proposal.proposal_id}",
+            value=False,
+        )
+        edit_key = f"edit_md_{proposal.proposal_id}"
+        if show_md:
             edited = st.text_area(
                 "SKILL.md",
                 value=proposal.proposed_skill_md,
@@ -914,11 +928,17 @@ def _render_skill_library_sidebar() -> None:
         ):
             # Top of the expander stays plain-language: description + usage.
             # The dev-tier metadata (version / created_by / injected_into /
-            # raw SKILL.md) tucks into the "技术细节" inner expander.
+            # raw SKILL.md) tucks behind a toggle — Streamlit forbids
+            # nested expanders so we use st.toggle here.
             st.write(s.get("description", ""))
             st.caption(T["skill_lib_usage_inline"].format(usage=usage))
 
-            with st.expander(T["skill_lib_tech_details"], expanded=False):
+            show_tech = st.toggle(
+                T["skill_lib_tech_details"],
+                key=f"skill_tech_{name}",
+                value=False,
+            )
+            if show_tech:
                 st.caption(
                     T["skill_lib_tech_meta"].format(
                         version=s.get("version", "1.0"),
