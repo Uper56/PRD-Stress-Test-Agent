@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from ..graph.state import Critique, CrossChallenge, GraphState, SupervisorVerdict
 from ..llm.provider import LLMProvider
+from ._language import system_with_language
 from ._parsing import extract_json
 
 logger = logging.getLogger(__name__)
@@ -151,12 +152,14 @@ async def run_supervisor_stream(
       {"stage": "done",     "final_verdict": dict}  — always the last event
     """
     user_msg = _format_supervisor_user_message(state)
+    prd_text = state.get("prd_text", "") or ""
+    system_prompt = system_with_language(SUPERVISOR_SYSTEM_PROMPT, prd_text)
 
     buffer = ""
     mode = "scan"  # scan | thinking | verdict | post_verdict
     verdict_text = ""  # accumulated raw text inside <verdict>...</verdict>
 
-    async for chunk in llm.stream(system=SUPERVISOR_SYSTEM_PROMPT, user=user_msg):
+    async for chunk in llm.stream(system=system_prompt, user=user_msg):
         if chunk.get("type") != "text":
             continue
         buffer += chunk.get("delta", "")

@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from ..graph.state import PRDClaim
 from ..llm.provider import LLMProvider
+from ._language import system_with_language
 from ._parsing import extract_json
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,10 @@ async def run_intake(prd_text: str, llm: LLMProvider) -> list[PRDClaim]:
     `src.graph.preprocess.number_lines` before invoking this function.
     """
     user_msg = f"PRD (line-numbered):\n\n{prd_text}\n\nReturn the claims JSON now."
-    response = await llm.complete(system=INTAKE_SYSTEM_PROMPT, user=user_msg)
+    response = await llm.complete(
+        system=system_with_language(INTAKE_SYSTEM_PROMPT, prd_text),
+        user=user_msg,
+    )
 
     obj = extract_json(response.text)
     if not obj or "claims" not in obj:

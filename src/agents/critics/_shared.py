@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from ...graph.state import Critique, CrossChallenge, GraphState, PRDClaim
 from ...llm.provider import LLMProvider
 from ...skills import Skill, default_retriever, format_skills_block
+from .._language import system_with_language
 from .._parsing import extract_json
 
 logger = logging.getLogger(__name__)
@@ -118,7 +119,14 @@ async def run_critic(
     retrieved_ids = [s.id for s in retrieved]
 
     user_msg = _format_user_message(prd_text, claims, skills_block)
-    response = await llm.complete(system=system_prompt, user=user_msg)
+    # Append a Chinese-output directive to the system prompt iff the PRD
+    # is Chinese — keeps the human-readable fields in the PRD's language
+    # while leaving JSON keys / severity enum / skill_ids in English so
+    # parsers don't break.
+    response = await llm.complete(
+        system=system_with_language(system_prompt, prd_text),
+        user=user_msg,
+    )
 
     obj = extract_json(response.text)
     if not obj or "critiques" not in obj:
@@ -230,7 +238,10 @@ async def run_challenger(
         prd_text, previous_critiques, prior_challenges, critic_id
     )
 
-    response = await llm.complete(system=system_prompt, user=user_msg)
+    response = await llm.complete(
+        system=system_with_language(system_prompt, prd_text),
+        user=user_msg,
+    )
     obj = extract_json(response.text)
     if not obj or "challenges" not in obj:
         logger.warning(

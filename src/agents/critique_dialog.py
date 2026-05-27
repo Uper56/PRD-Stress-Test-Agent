@@ -22,6 +22,7 @@ from typing import AsyncIterator
 
 from ..graph.state import Critique
 from ..llm.provider import LLMProvider
+from ._language import system_with_language
 from .critics.business import SYSTEM_PROMPT as BUSINESS_PROMPT
 from .critics.design import SYSTEM_PROMPT as DESIGN_PROMPT
 from .critics.engineering import SYSTEM_PROMPT as ENGINEERING_PROMPT
@@ -135,7 +136,10 @@ async def run_critique_dialog(
     current one just added by the UI), an additional terminator chunk is
     yielded so the UI can freeze further input.
     """
-    system = _build_system_prompt(critic_id, original_critique)
+    system = system_with_language(
+        _build_system_prompt(critic_id, original_critique),
+        prd_text,
+    )
     user = _build_user_message(prd_text, original_critique, conversation_history)
 
     async for chunk in llm.stream(system=system, user=user):
