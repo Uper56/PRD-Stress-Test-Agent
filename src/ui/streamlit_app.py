@@ -153,58 +153,57 @@ T = {
     "verdict_conflicts_heading": "#### 分歧裁决",
 
     # ---- Run history sidebar ------------------------------------------------
-    # User-facing language: 不暴露 critiques/hits/misses 这种 dev 术语；
-    # 默认只露关键事实 (PRD 名 + 严重问题数), 详情藏在 expander 里.
+    # 目标用户是中高级 PM：P0/P1/P2 直接用，Skill 这种项目术语不淡化。
+    # 但结构上仍然减负: 默认 caption 只露 P 计数, dev metadata
+    # (critique 数/hits/misses) 折进"更多详情"里.
     "history_heading": "📊 历史评审",
     "history_load_failed": "无法加载历史记录",
-    "history_empty": "还没跑过评审 —— 点上方「开始评审」试一下吧",
+    "history_empty": "还没跑过评审 —— 点上方「开始评审」试一下",
     "history_count": "最近 {n} 次评审",
     "history_run_title": "{ts} · {filename}",
     "history_run_filename_default": "自定义 PRD",
-    "history_run_caption": "{p0} 个严重问题 · {p1} 个关注项 · {p2} 个建议",
+    "history_run_caption": "P0 {p0} · P1 {p1} · P2 {p2}",
     "history_run_summary": "**总结**：{summary}",
-    "history_top_findings_heading": "主要发现",
-    "history_more_details": "查看技术细节",
+    "history_more_details": "更多详情",
+    "history_details_meta": "共 {critiques} 条 critique · 命中 Skill {hits} 处 · 未覆盖 {misses} 处",
 
     # ---- Skill library sidebar ----------------------------------------------
-    # 用户视角: 看的是"系统会用哪些角度审 PRD", 不是"有几条 spec-compliant 的 SKILL.md".
-    "skill_lib_heading": "📚 审查角度",
-    "skill_lib_load_failed": "无法加载",
-    "skill_lib_caption": "系统目前从 {n} 个角度审查每份 PRD",
+    "skill_lib_heading": "📚 Skill 库",
+    "skill_lib_load_failed": "Skill 库加载失败",
+    "skill_lib_caption": "{n} 个 Skill 启用中",
     "skill_lib_expander_label": "{name}",
     "skill_lib_usage_inline": "已应用 {usage} 次",
     "skill_lib_tech_details": "技术细节",
-    "skill_lib_tech_meta": "v{version} · 由 {created_by} 创建 · 路由到 {routes}",
-    "btn_show_skill_md": "查看完整规则 (SKILL.md)",
+    "skill_lib_tech_meta": "v{version} · 由 {created_by} 创建 · 注入到 {routes}",
+    "btn_show_skill_md": "查看 SKILL.md",
     "btn_skill_pin": "📌 置顶",
     "btn_skill_deprecate": "🗑 停用",
 
     # ---- Skill distillation sidebar -----------------------------------------
-    # 用户视角: "系统会自己学新角度吗?" 答: 会, 但需要你确认.
-    "distill_heading": "🧪 自学习",
-    "distill_intro": "系统会从历史评审中发现新的审查角度，等你确认后加入审查库。",
+    "distill_heading": "🧪 Skill 提炼",
+    "distill_intro": "系统从历史评审中提炼新 Skill，待你确认后加入 Skill 库。",
     "distill_history_load_failed": "无法加载历史",
-    "distill_proposals_load_failed": "无法加载候选",
-    "distill_stats_caption": "已积累 {runs} 次评审 · {misses} 处可挖掘的盲点",
-    "btn_run_distiller": "🔍 尝试提炼",
-    "spinner_distill_mining": "正在比对历史评审，寻找重复出现的盲点…",
+    "distill_proposals_load_failed": "无法加载提案",
+    "distill_stats_caption": "历史 {runs} 次评审 · {misses} 处 Skill 未覆盖的盲点",
+    "btn_run_distiller": "🔍 提炼 Skill",
+    "spinner_distill_mining": "正在跨 PRD 挖掘重复出现的模式…",
     "distill_failed": "提炼失败",
     "btn_distill_clear": "清除",
-    "btn_distill_clear_help": "隐藏上次的结果",
-    "distill_no_new_candidates": "暂未发现稳定的新角度",
-    "distill_found_candidates": "发现 {n} 个候选审查角度",
-    "distill_no_pending": "没有待你确认的候选",
-    "distill_pending_count": "{n} 个待确认",
+    "btn_distill_clear_help": "隐藏上次结果",
+    "distill_no_new_candidates": "暂未发现稳定的新 Skill 候选",
+    "distill_found_candidates": "发现 {n} 个候选 Skill",
+    "distill_no_pending": "暂无待审议的 Skill 提案",
+    "distill_pending_count": "{n} 个待审议 Skill 提案",
 
     # ---- Proposal card ------------------------------------------------------
-    "proposal_caption": "在 {freq} 份不同 PRD 中重复出现",
-    "proposal_evidence_expander": "📎 出现在这些评审中 ({n})",
-    "proposal_full_md_expander": "📄 查看完整规则",
+    "proposal_caption": "在 {freq} 份不同 PRD 中重复出现 · 注入到 {routes}",
+    "proposal_evidence_expander": "📎 证据 ({n} 条)",
+    "proposal_full_md_expander": "📄 完整 SKILL.md",
     "btn_proposal_approve": "✅ 采纳",
     "btn_proposal_reject": "❌ 驳回",
     "btn_proposal_save_edit": "✏️ 保存修改",
     "proposal_promote_failed": "采纳失败 —— 请查看日志",
-    "proposal_added": "✅ 已加入审查库：{name}",
+    "proposal_added": "✅ 已加入 Skill 库：{name}",
     "proposal_approve_failed": "采纳失败：{error}",
     "proposal_edit_saved": "修改已保存",
     "proposal_no_changes": "无修改需保存",
@@ -693,10 +692,17 @@ def _render_run_history_sidebar() -> None:
                     for item in items:
                         st.markdown(f"- {item}")
 
-            # Dev-tier details: per-critique skill attribution, P2 list,
-            # which critic owned each finding. Folded by default so the
-            # casual viewer doesn't see internal vocabulary.
+            # Dev-tier details: P2 list, per-critique critic ownership +
+            # Skill attribution, and the critique/hits/misses count line.
+            # Folded by default but still here for the curious PM.
             with st.expander(T["history_more_details"], expanded=False):
+                st.caption(
+                    T["history_details_meta"].format(
+                        critiques=len(r.critiques),
+                        hits=len(r.skill_hits),
+                        misses=len(r.skill_misses),
+                    )
+                )
                 p2_items = verdict.get("p2_suggestions", []) or []
                 if p2_items:
                     st.markdown("**P2**")
@@ -803,7 +809,7 @@ def _render_proposal_card(proposal) -> None:
         st.caption(
             T["proposal_caption"].format(
                 freq=proposal.pattern_frequency,
-                routes=", ".join(proposal.injected_into),
+                routes=", ".join(proposal.injected_into) or "—",
             )
         )
         st.write(desc)
