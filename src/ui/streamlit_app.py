@@ -31,6 +31,13 @@ from src.main import persist_run, run_pipeline
 from src.skills.curator import SkillCurator
 from src.skills.mcp_client import list_skills, read_skill_md
 from src.storage import HistoryStore, ProposalsStore
+from src.ui.prd_loader import (
+    EmptyExtractionError,
+    FileTooLargeError,
+    PRDLoaderError,
+    UnsupportedFileType,
+    extract_text as extract_prd_text,
+)
 from src.ui.rate_limit import (
     GLOBAL_PER_DAY as RATE_GLOBAL_PER_DAY,
     PER_IP_PER_HOUR as RATE_PER_IP_PER_HOUR,
@@ -87,9 +94,14 @@ T = {
     "prd_source_label": "PRD 来源",
     "prd_source_paste": "粘贴文本",
     "prd_source_golden": "选择内置 PRD",
+    "prd_source_upload": "上传文件",
     "prd_golden_label": "内置 PRD",
     "prd_preview": "预览",
     "prd_paste_label": "粘贴 PRD 全文",
+    "prd_upload_label": "上传 PRD 文件",
+    "prd_upload_help": "支持 PDF / Word(.docx) / Markdown / TXT，单文件上限 2 MB",
+    "prd_upload_success": "✅ 已读取 {chars} 字 · 来自 {filename}",
+    "prd_upload_failed": "📛 文件读取失败：{error}",
     "btn_run_stress_test": "开始评审",
     "btn_reset": "重置",
     "warn_no_prd": "请先提供 PRD",
@@ -141,52 +153,60 @@ T = {
     "verdict_conflicts_heading": "#### 分歧裁决",
 
     # ---- Run history sidebar ------------------------------------------------
-    "history_heading": "📊 历史记录",
-    "history_load_failed": "历史记录加载失败：{error}",
-    "history_empty": "暂无运行记录 —— 跑一次评审就有了",
-    "history_count": "最近 {n} 条记录",
+    # User-facing language: 不暴露 critiques/hits/misses 这种 dev 术语；
+    # 默认只露关键事实 (PRD 名 + 严重问题数), 详情藏在 expander 里.
+    "history_heading": "📊 历史评审",
+    "history_load_failed": "无法加载历史记录",
+    "history_empty": "还没跑过评审 —— 点上方「开始评审」试一下吧",
+    "history_count": "最近 {n} 次评审",
     "history_run_title": "{ts} · {filename}",
-    "history_run_filename_default": "自定义输入",
-    "history_run_caption": "P0 {p0} · P1 {p1} · P2 {p2} · 共 {critiques} 条 critique · 命中 Skill {hits} · 未覆盖 {misses}",
-    "history_run_summary": "**核心结论** —— {summary}",
-    "history_critique_details": "Critique 详情",
+    "history_run_filename_default": "自定义 PRD",
+    "history_run_caption": "{p0} 个严重问题 · {p1} 个关注项 · {p2} 个建议",
+    "history_run_summary": "**总结**：{summary}",
+    "history_top_findings_heading": "主要发现",
+    "history_more_details": "查看技术细节",
 
     # ---- Skill library sidebar ----------------------------------------------
-    "skill_lib_heading": "📚 Skill 库",
-    "skill_lib_load_failed": "Skill 库加载失败：{error}",
-    "skill_lib_caption": "{n} 条启用中 · 遵循 SKILL.md 规范 · 只读",
-    "skill_lib_expander_label": "{name}  ·  使用 {usage} 次",
-    "skill_lib_meta_caption": "injected_into: {routes}  ·  v{version}  ·  by {created_by}  ·  使用 {usage} 次",
-    "btn_show_skill_md": "查看 SKILL.md",
+    # 用户视角: 看的是"系统会用哪些角度审 PRD", 不是"有几条 spec-compliant 的 SKILL.md".
+    "skill_lib_heading": "📚 审查角度",
+    "skill_lib_load_failed": "无法加载",
+    "skill_lib_caption": "系统目前从 {n} 个角度审查每份 PRD",
+    "skill_lib_expander_label": "{name}",
+    "skill_lib_usage_inline": "已应用 {usage} 次",
+    "skill_lib_tech_details": "技术细节",
+    "skill_lib_tech_meta": "v{version} · 由 {created_by} 创建 · 路由到 {routes}",
+    "btn_show_skill_md": "查看完整规则 (SKILL.md)",
     "btn_skill_pin": "📌 置顶",
-    "btn_skill_deprecate": "🗑 弃用",
+    "btn_skill_deprecate": "🗑 停用",
 
     # ---- Skill distillation sidebar -----------------------------------------
-    "distill_heading": "🧪 Skill 提炼",
-    "distill_history_load_failed": "历史加载失败：{error}",
-    "distill_proposals_load_failed": "提案加载失败：{error}",
-    "distill_stats_caption": "历史共 {runs} 条 · {misses} 条未命中 critique 来自 {miss_runs} 次运行",
-    "btn_run_distiller": "▶️ 提炼新 Skill",
-    "spinner_distill_mining": "正在跨 PRD 挖掘模式…",
-    "distill_failed": "提炼失败：{error}",
+    # 用户视角: "系统会自己学新角度吗?" 答: 会, 但需要你确认.
+    "distill_heading": "🧪 自学习",
+    "distill_intro": "系统会从历史评审中发现新的审查角度，等你确认后加入审查库。",
+    "distill_history_load_failed": "无法加载历史",
+    "distill_proposals_load_failed": "无法加载候选",
+    "distill_stats_caption": "已积累 {runs} 次评审 · {misses} 处可挖掘的盲点",
+    "btn_run_distiller": "🔍 尝试提炼",
+    "spinner_distill_mining": "正在比对历史评审，寻找重复出现的盲点…",
+    "distill_failed": "提炼失败",
     "btn_distill_clear": "清除",
-    "btn_distill_clear_help": "关闭结果提示",
-    "distill_no_new_candidates": "本次未发现新候选",
-    "distill_found_candidates": "发现 {n} 条候选 Skill",
-    "distill_no_pending": "暂无待审议的提案",
-    "distill_pending_count": "{n} 条待审议提案",
+    "btn_distill_clear_help": "隐藏上次的结果",
+    "distill_no_new_candidates": "暂未发现稳定的新角度",
+    "distill_found_candidates": "发现 {n} 个候选审查角度",
+    "distill_no_pending": "没有待你确认的候选",
+    "distill_pending_count": "{n} 个待确认",
 
     # ---- Proposal card ------------------------------------------------------
-    "proposal_caption": "freq={freq} 份 PRD · injected_into: {routes}",
-    "proposal_evidence_expander": "📎 证据 ({n} 条)",
-    "proposal_full_md_expander": "📄 完整 SKILL.md",
+    "proposal_caption": "在 {freq} 份不同 PRD 中重复出现",
+    "proposal_evidence_expander": "📎 出现在这些评审中 ({n})",
+    "proposal_full_md_expander": "📄 查看完整规则",
     "btn_proposal_approve": "✅ 采纳",
     "btn_proposal_reject": "❌ 驳回",
     "btn_proposal_save_edit": "✏️ 保存修改",
     "proposal_promote_failed": "采纳失败 —— 请查看日志",
-    "proposal_added": "✅ 已加入 Skill 库：{name}",
+    "proposal_added": "✅ 已加入审查库：{name}",
     "proposal_approve_failed": "采纳失败：{error}",
-    "proposal_edit_saved": "修改已保存（状态：edited）",
+    "proposal_edit_saved": "修改已保存",
     "proposal_no_changes": "无修改需保存",
 
     # ---- Pipeline run -------------------------------------------------------
@@ -626,12 +646,17 @@ def _render_run(run: dict) -> None:
 
 
 def _render_run_history_sidebar() -> None:
-    """List the most recent runs persisted to `data/results/history/`."""
+    """User-friendly recent-evaluations panel.
+
+    Default view shows just date + PRD name + a one-line severity count.
+    Tech-y stuff (skill_id chips per critique, individual critic ownership)
+    is hidden in an inner expander so the casual visitor sees a clean list.
+    """
     st.sidebar.header(T["history_heading"])
     try:
         runs = HistoryStore().list_recent(n=20)
-    except Exception as e:  # pragma: no cover
-        st.sidebar.error(T["history_load_failed"].format(error=e))
+    except Exception:  # pragma: no cover — keep the sidebar usable even if disk broke
+        st.sidebar.caption(T["history_load_failed"])
         return
 
     if not runs:
@@ -644,41 +669,40 @@ def _render_run_history_sidebar() -> None:
         p0 = len(verdict.get("p0_blockers", []) or [])
         p1 = len(verdict.get("p1_concerns", []) or [])
         p2 = len(verdict.get("p2_suggestions", []) or [])
+        # Drop seconds from the timestamp — minute precision is plenty
+        # for "when did I run this", and shorter labels look cleaner.
         title = T["history_run_title"].format(
-            ts=r.timestamp[:19].replace("T", " "),
+            ts=r.timestamp[:16].replace("T", " "),
             filename=r.prd_filename or T["history_run_filename_default"],
         )
         with st.sidebar.expander(title, expanded=False):
-            st.caption(
-                T["history_run_caption"].format(
-                    p0=p0,
-                    p1=p1,
-                    p2=p2,
-                    critiques=len(r.critiques),
-                    hits=len(r.skill_hits),
-                    misses=len(r.skill_misses),
-                )
-            )
+            st.caption(T["history_run_caption"].format(p0=p0, p1=p1, p2=p2))
             if verdict.get("executive_summary"):
                 st.markdown(
                     T["history_run_summary"].format(
                         summary=verdict["executive_summary"]
                     )
                 )
-            # Severity labels (P0/P1/P2) are intentionally kept as-is —
-            # they're the canonical PM vocabulary in both languages.
-            for label, key in (
-                ("P0", "p0_blockers"),
-                ("P1", "p1_concerns"),
-                ("P2", "p2_suggestions"),
-            ):
+            # Show the P0 / P1 list inline — those are the "what went wrong"
+            # the user most likely came back for. P2 hides into the
+            # technical-details sub-expander.
+            for sev_label, key in (("P0", "p0_blockers"), ("P1", "p1_concerns")):
                 items = verdict.get(key, []) or []
                 if items:
-                    st.markdown(f"_{label}_")
+                    st.markdown(f"**{sev_label}**")
                     for item in items:
                         st.markdown(f"- {item}")
-            if r.critiques:
-                with st.expander(T["history_critique_details"], expanded=False):
+
+            # Dev-tier details: per-critique skill attribution, P2 list,
+            # which critic owned each finding. Folded by default so the
+            # casual viewer doesn't see internal vocabulary.
+            with st.expander(T["history_more_details"], expanded=False):
+                p2_items = verdict.get("p2_suggestions", []) or []
+                if p2_items:
+                    st.markdown("**P2**")
+                    for item in p2_items:
+                        st.markdown(f"- {item}")
+                if r.critiques:
                     for c in r.critiques:
                         st.markdown(
                             f"**{c.get('critic_id','?')}** [{c.get('severity','?')}] "
@@ -698,22 +722,24 @@ def _render_distillation_panel() -> None:
     pending proposal with Approve / Reject / Edit affordances.
     """
     st.sidebar.header(T["distill_heading"])
+    # One-liner explanation up top — most visitors will never click
+    # "Run Distiller", but they should understand at a glance what
+    # this panel claims the system can do.
+    st.sidebar.caption(T["distill_intro"])
 
     try:
         history = HistoryStore()
         runs = history.list_recent(n=10_000)
         miss_runs = history.query(only_misses=True)
-    except Exception as e:  # pragma: no cover
-        st.sidebar.error(T["distill_history_load_failed"].format(error=e))
+    except Exception:  # pragma: no cover
+        st.sidebar.caption(T["distill_history_load_failed"])
         return
 
     miss_critiques = sum(
         sum(1 for c in r.critiques if not c.get("skill_id")) for r in miss_runs
     )
     st.sidebar.caption(
-        T["distill_stats_caption"].format(
-            runs=len(runs), misses=miss_critiques, miss_runs=len(miss_runs)
-        )
+        T["distill_stats_caption"].format(runs=len(runs), misses=miss_critiques)
     )
 
     col_run, col_clear = st.sidebar.columns([2, 1])
@@ -730,8 +756,8 @@ def _render_distillation_panel() -> None:
                     for p in proposals:
                         store.save(p)
                     st.session_state["last_distill_count"] = len(proposals)
-                except Exception as e:  # pragma: no cover
-                    st.error(T["distill_failed"].format(error=e))
+                except Exception:  # pragma: no cover
+                    st.error(T["distill_failed"])
                     return
         st.rerun()
 
@@ -753,8 +779,8 @@ def _render_distillation_panel() -> None:
     # ---- Pending proposals -------------------------------------------------
     try:
         pending = ProposalsStore().list_pending()
-    except Exception as e:  # pragma: no cover
-        st.sidebar.error(T["distill_proposals_load_failed"].format(error=e))
+    except Exception:  # pragma: no cover
+        st.sidebar.caption(T["distill_proposals_load_failed"])
         return
 
     if not pending:
@@ -867,8 +893,8 @@ def _render_skill_library_sidebar() -> None:
     st.sidebar.header(T["skill_lib_heading"])
     try:
         skills = list_skills(status="active")
-    except Exception as e:  # pragma: no cover — defensive
-        st.sidebar.error(T["skill_lib_load_failed"].format(error=e))
+    except Exception:  # pragma: no cover — defensive
+        st.sidebar.caption(T["skill_lib_load_failed"])
         return
 
     st.sidebar.caption(T["skill_lib_caption"].format(n=len(skills)))
@@ -877,37 +903,39 @@ def _render_skill_library_sidebar() -> None:
         name = s.get("name") or s.get("id")
         usage = int(s.get("usage_count", 0) or 0)
         with st.sidebar.expander(
-            T["skill_lib_expander_label"].format(name=name, usage=usage),
+            T["skill_lib_expander_label"].format(name=name),
             expanded=False,
         ):
-            st.caption(
-                T["skill_lib_meta_caption"].format(
-                    routes=", ".join(s.get("injected_into", [])) or "—",
-                    version=s.get("version", "1.0"),
-                    created_by=s.get("created_by", "?"),
-                    usage=usage,
-                )
-            )
+            # Top of the expander stays plain-language: description + usage.
+            # The dev-tier metadata (version / created_by / injected_into /
+            # raw SKILL.md) tucks into the "技术细节" inner expander.
             st.write(s.get("description", ""))
+            st.caption(T["skill_lib_usage_inline"].format(usage=usage))
 
-            # On-demand: load and render the raw SKILL.md (frontmatter + body).
-            if st.button(T["btn_show_skill_md"], key=f"skill_body_{name}"):
-                st.session_state[f"skill_body_open_{name}"] = True
-            if st.session_state.get(f"skill_body_open_{name}"):
-                try:
-                    raw = read_skill_md(name)
-                    # Strip frontmatter for prettier in-app rendering; keep
-                    # the body's markdown structure intact.
-                    body = raw
-                    if raw.startswith("---"):
-                        parts = raw.split("---", 2)
-                        if len(parts) == 3:
-                            body = parts[2].lstrip("\n")
-                    st.markdown(body)
-                except Exception as e:  # pragma: no cover
-                    st.error(str(e))
+            with st.expander(T["skill_lib_tech_details"], expanded=False):
+                st.caption(
+                    T["skill_lib_tech_meta"].format(
+                        version=s.get("version", "1.0"),
+                        created_by=s.get("created_by", "?"),
+                        routes=", ".join(s.get("injected_into", [])) or "—",
+                    )
+                )
+                if st.button(T["btn_show_skill_md"], key=f"skill_body_{name}"):
+                    st.session_state[f"skill_body_open_{name}"] = True
+                if st.session_state.get(f"skill_body_open_{name}"):
+                    try:
+                        raw = read_skill_md(name)
+                        body = raw
+                        if raw.startswith("---"):
+                            parts = raw.split("---", 2)
+                            if len(parts) == 3:
+                                body = parts[2].lstrip("\n")
+                        st.markdown(body)
+                    except Exception as e:  # pragma: no cover
+                        st.caption(str(e))
 
-            # Curator actions — Day 9 wiring placeholders.
+            # Curator-only actions: kept available but unobtrusive.
+            # Disabled until Day-13 curator-write tools land.
             col_a, col_b = st.columns(2)
             col_a.button(T["btn_skill_pin"], key=f"pin_{name}", disabled=True)
             col_b.button(T["btn_skill_deprecate"], key=f"dep_{name}", disabled=True)
@@ -1110,7 +1138,11 @@ def _render_main_tab() -> None:
     # the radio back to its default on every Run Distiller rerun.
     source = st.radio(
         T["prd_source_label"],
-        [T["prd_source_paste"], T["prd_source_golden"]],
+        [
+            T["prd_source_paste"],
+            T["prd_source_golden"],
+            T["prd_source_upload"],
+        ],
         horizontal=True,
         key="prd_source_choice",
     )
@@ -1124,6 +1156,38 @@ def _render_main_tab() -> None:
         prd_text = golden[choice]
         prd_filename = choice
         st.expander(T["prd_preview"]).code(prd_text, language="markdown")
+    elif source == T["prd_source_upload"]:
+        # File uploader: accept PDF / Word (.docx) / Markdown / TXT.
+        # Streamlit keeps the UploadedFile in session_state across
+        # reruns automatically when we pin the widget key — handy
+        # because every interaction triggers a rerun.
+        uploaded = st.file_uploader(
+            T["prd_upload_label"],
+            type=["pdf", "docx", "md", "markdown", "txt"],
+            key="prd_upload_widget",
+            help=T["prd_upload_help"],
+        )
+        if uploaded is not None:
+            try:
+                prd_text = extract_prd_text(uploaded.name, uploaded.getvalue())
+                prd_filename = uploaded.name
+                st.success(
+                    T["prd_upload_success"].format(
+                        chars=len(prd_text), filename=uploaded.name
+                    )
+                )
+                with st.expander(T["prd_preview"], expanded=False):
+                    st.code(prd_text, language="markdown")
+            except (
+                UnsupportedFileType,
+                FileTooLargeError,
+                EmptyExtractionError,
+                PRDLoaderError,
+            ) as e:
+                # Show the localised exception message verbatim — these
+                # are already Chinese strings raised from prd_loader.py.
+                st.error(T["prd_upload_failed"].format(error=e))
+                prd_text = ""
     else:
         prd_text = st.text_area(
             T["prd_paste_label"], height=300, key="prd_paste_text"
