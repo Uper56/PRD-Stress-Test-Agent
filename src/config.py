@@ -20,7 +20,28 @@ from .llm.provider import LLMProvider
 load_dotenv()
 
 
-PROVIDER = os.getenv("LLM_PROVIDER", "mock").lower()
+def _resolve_provider() -> str:
+    """Decide which LLM provider is active.
+
+    Priority:
+      1. Explicit `LLM_PROVIDER` env var wins. Set this to "mock" to
+         force MockProvider even when a key is present (useful for
+         deterministic demos, screenshots, tests).
+      2. Otherwise, if `OPENAI_API_KEY` is set, infer `openai`. This is
+         the path that fixes the HF-Space-deployment trap: a user who
+         goes to Settings → Variables and secrets and adds the API key
+         expects the system to USE it, not silently stay on Mock.
+      3. Final fallback: "mock".
+    """
+    explicit = os.getenv("LLM_PROVIDER")
+    if explicit:
+        return explicit.strip().lower()
+    if os.getenv("OPENAI_API_KEY"):
+        return "openai"
+    return "mock"
+
+
+PROVIDER = _resolve_provider()
 MAX_CRITIC_TOKENS = int(os.getenv("MAX_CRITIC_TOKENS", "1500"))
 MAX_SUPERVISOR_TOKENS = int(os.getenv("MAX_SUPERVISOR_TOKENS", "4000"))
 MAX_CROSS_CHALLENGE_ROUNDS = int(os.getenv("MAX_CROSS_CHALLENGE_ROUNDS", "2"))

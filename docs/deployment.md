@@ -44,8 +44,13 @@ it in source control. Don't push the `.env` file.
 - Value: `sk-...` (your school key)
 - Click **Save**.
 
-Optionally also set:
-- `LLM_PROVIDER` → `openai`
+That's all that's required. `src/config.py` auto-detects: if
+`OPENAI_API_KEY` is present and `LLM_PROVIDER` is unset, the system
+infers `openai`. (Set `LLM_PROVIDER=mock` explicitly if you ever want
+to force Mock even with a key present — useful for deterministic
+demos / screenshots.)
+
+Optional extra vars you can set on the same page:
 - `OPENAI_CRITIC_MODEL` → `gpt-4o-mini` (default if unset)
 - `OPENAI_SUPERVISOR_MODEL` → `gpt-4o-mini` (set explicitly if you want
   to override the default `gpt-4o` to save money on the demo)

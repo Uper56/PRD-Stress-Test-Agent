@@ -1126,10 +1126,12 @@ def _render_demo_banner() -> None:
     """
     import os as _os
 
-    # Cheap way to figure out which provider is live without constructing it
-    # again — read the env var directly. Matches src/config.py:PROVIDER.
-    provider = (_os.getenv("LLM_PROVIDER", "mock") or "mock").lower()
-    if provider == "openai":
+    # Read the resolved provider straight from config — that way the
+    # banner reflects the same fallback chain the LLM factories use
+    # (explicit LLM_PROVIDER > inferred from OPENAI_API_KEY > mock).
+    from src.config import PROVIDER as _ACTIVE_PROVIDER
+
+    if _ACTIVE_PROVIDER == "openai":
         model = _os.getenv("OPENAI_CRITIC_MODEL", "gpt-4o-mini")
     else:
         model = "MockProvider"
