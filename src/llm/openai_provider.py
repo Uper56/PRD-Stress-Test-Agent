@@ -139,18 +139,41 @@ class OpenAIProvider(LLMProvider):
         # leave it ON for consistency with `complete`. Supervisor stream
         # consumer doesn't care — it only watches text deltas.
         kwargs = self._build_kwargs(system, user, max_tokens, temperature, stream=True)
+        yielded_any = False
         try:
             stream = await self._client.chat.completions.create(**kwargs)
+            async for chunk in stream:
+                try:
+                    delta = chunk.choices[0].delta.content if chunk.choices else None
+                except (AttributeError, IndexError):
+                    delta = None
+                if delta:
+                    yielded_any = True
+                    yield {"type": "text", "delta": delta}
         except Exception as e:  # noqa: BLE001
-            raise self._classify(e) from e
-
-        async for chunk in stream:
-            try:
-                delta = chunk.choices[0].delta.content if chunk.choices else None
-            except (AttributeError, IndexError):
-                delta = None
-            if delta:
-                yield {"type": "text", "delta": delta}
+            if yielded_any:
+                # Partial content already delivered — the connection dropped
+                # mid-response. Better to end gracefully with what we have
+                # than to crash the whole run.
+                logger.warning("stream() dropped mid-response (%s); ending early", e)
+                return
+            # Nothing delivered yet. Many proxied / corporate endpoints (and
+            # occasionally a flaky egress) refuse SSE streaming with a generic
+            # connection error even though plain completions work. Fall back
+            # to a single non-streaming call and emit the whole response as
+            # one chunk — the supervisor's XML parser handles a one-shot
+            # chunk identically. complete() carries its own retry, so this
+            # also covers transient APIConnectionErrors.
+            logger.warning(
+                "stream() failed to start (%s); falling back to non-streaming complete()",
+                e,
+            )
+            resp = await self.complete(
+                system, user, max_tokens=max_tokens, temperature=temperature
+            )
+            if resp.text:
+                yield {"type": "text", "delta": resp.text}
+            return
 
     # ---- internals --------------------------------------------------------
 
