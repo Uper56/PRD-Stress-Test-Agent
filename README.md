@@ -87,6 +87,7 @@ Deep version with per-component trade-offs: [`docs/architecture.md`](docs/archit
 - **Anthropic SKILL.md spec over a custom YAML index** — the December 2025 spec is what Anthropic and OpenAI Codex CLI both consume. One folder per skill, frontmatter + Markdown body. Runtime telemetry decoupled into `runtime_stats.yaml` so skill content stays diff-clean across hundreds of runs.
 - **Cross-challenge with three-layer convergence** — round cap + empty-round early exit + similarity threshold. Without it the critics either stall on infinite arguments or fail to push back at all; convergence detection is the safety valve.
 - **HITL approval on distilled skills** — the Distiller proposes, a human accepts. The data above shows why: an auto-distilled skill landed +1pp worse than skill_seed_only on every metric. Without HITL the library gradually fills with regressions.
+- **MCP for the display surface, direct read for the hot path** — the Skill Library is a real FastMCP server (stdio). The Streamlit UI browses it over a live MCP connection (standardized, externally consumable); the 4-critic hot loop reads in-process from the same backend (no per-call subprocess/protocol overhead). Deliberate layering, not a shortcut — and it degrades to in-process reads if the server can't start.
 - **Ablation harness in the system, not bolted on** — `python -m src.eval --quick` is one command. Anyone reading this README can reproduce the table above.
 
 ## Quickstart
@@ -113,9 +114,9 @@ streamlit run src/ui/streamlit_app.py      # 📊 Ablation tab loads latest.json
 - **LangGraph 1.x** — agent orchestration
 - **Pydantic v2** — every state shape, every prompt boundary
 - **Streamlit ≥1.40** — two-tab UI (Stress Test + Ablation Results)
-- **MCP (FastMCP)** — `src/mcp_servers/skill_server.py` exposes `list_skills` / `read_skill` / `read_skill_md` / `search_skills` over stdio
+- **MCP (FastMCP)** — the skill library is exposed over a custom FastMCP server (`src/mcp_servers/skill_server.py`, stdio, 4 tools: `list_skills` / `read_skill` / `read_skill_md` / `search_skills`). The Streamlit UI browses skills over a **live MCP connection**; the latency-sensitive critic loop reads in-process from the same `SkillRetriever` backend — MCP for external/UI access, direct read for the hot path. Verify with `python scripts/verify_mcp.py`.
 - **OpenAI ≥1.50** — `gpt-4o-mini` (critics) + currently `gpt-4o-mini` (supervisor; gpt-4o upgrade is future work)
-- **pytest + pytest-asyncio** — 85 tests, ~6s
+- **pytest + pytest-asyncio** — 102 tests, ~10s
 
 ## Roadmap
 

@@ -7,11 +7,55 @@ A multi-agent system that takes a PRD as input, runs 4 parallel critic agents
 cross-challenge between them, and has a Supervisor agent synthesize a
 structured, severity-ranked blindspot report. The long-term differentiator is
 a Skill Library (cross-PRD reusable review heuristics) exposed via a custom
-MCP server — not yet implemented.
+FastMCP server (stdio); the Streamlit UI browses it over a live MCP
+connection while the critic hot path reads the same backend in-process.
 
 ---
 
-## 2. Progress — Days 1 through 11
+## 2. Progress — Days 1 through 12
+
+### Post-Day-12 — Live MCP wiring (display surface) + architecture layering
+
+The Skill Library MCP server (`src/mcp_servers/skill_server.py`) was real
+since Day 7, but nothing in the running product called it over the
+protocol — the critic hot path used `default_retriever()` directly and
+the Streamlit panel used `mcp_client.py` (an in-process mirror). That
+made "the system uses MCP" *not* literally true for any live code path.
+
+**Decision — deliberate display-vs-hot-path layering:**
+- **Display surface (Streamlit Skill Library panel)** now browses skills
+  over a **live MCP connection** to the real FastMCP server via stdio.
+  New module `src/skills/mcp_live_client.py:MCPGateway` owns a persistent
+  stdio session on a dedicated background event loop (Streamlit reruns
+  spin a fresh loop each time, so a `ClientSession` can't be cached and
+  reused across loops — the gateway marshals calls onto its own loop via
+  `run_coroutine_threadsafe`). Cached with `st.cache_resource` so ONE
+  server subprocess is reused across reruns.
+- **Latency-sensitive critic hot path stays in-process** —
+  `_shared.py:run_critic` still calls `default_retriever().retrieve()`.
+  We don't pay subprocess + protocol overhead on every critic call.
+- **Graceful fallback**: if the server subprocess can't start (sandboxed
+  host that blocks subprocesses, e.g. some HF Space configs), the panel
+  degrades to the in-process mirror and shows "MCP connection
+  unavailable, using local fallback". Default path is real MCP.
+- **Visible proof**: the panel shows `🔌 Connected via MCP (FastMCP ·
+  stdio)` when live. `python scripts/verify_mcp.py` independently proves
+  the protocol works AND that the UI gateway returns the right data.
+
+**Why this matters for honesty:** the truthful résumé/README claim is now
+"the UI browses skills over a live MCP connection; the hot path reads
+in-process from the same backend." NOT "the system operates through MCP"
+(the critic loop deliberately does not).
+
+**Bug fixed in passing:** `verify_mcp.py` reported "15 active skills" when
+there are 7 — it parsed `content[0].text` (one skill dict) and counted
+its *keys*. FastMCP returns typed results both as `structuredContent=
+{"result": [...]}` and as one `TextContent` block per list item; the new
+`unwrap_tool_result()` reads `structuredContent["result"]` first.
+
+Tests: +5 (`tests/test_mcp_live_client.py`, pure unwrap logic — subprocess
+integration stays in the verify script to keep the suite fast). **102
+tests, 0 warnings.** Critic hot path + all prior behavior unchanged.
 
 ### Day 1 — Scaffold
 - Repo skeleton, empty package tree, `.env.example`, `.gitignore`.

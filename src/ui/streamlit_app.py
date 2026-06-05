@@ -30,7 +30,8 @@ from src.graph.state import Critique
 from src.llm.mock_provider import MockProvider  # noqa: F401 — fallback if config fails
 from src.main import persist_run, run_pipeline
 from src.skills.curator import SkillCurator
-from src.skills.mcp_client import list_skills, read_skill_md
+from src.skills.mcp_client import list_skills, read_skill_md  # in-process fallback
+from src.skills.mcp_live_client import build_gateway
 from src.storage import HistoryStore, ProposalsStore
 from src.ui.prd_loader import (
     EmptyExtractionError,
@@ -172,6 +173,8 @@ T = {
     "skill_lib_heading": "📚 Skill 库",
     "skill_lib_load_failed": "Skill 库加载失败",
     "skill_lib_caption": "{n} 个 Skill 启用中",
+    "skill_lib_mcp_connected": "🔌 Connected via MCP (FastMCP · stdio)",
+    "skill_lib_mcp_fallback": "⚠️ MCP connection unavailable, using local fallback",
     "skill_lib_expander_label": "{name}",
     "skill_lib_usage_inline": "已应用 {usage} 次",
     "skill_lib_tech_details": "技术细节",
@@ -917,20 +920,69 @@ def _frontmatter_field(skill_md: str, field: str) -> str | None:
     return str(val) if val else None
 
 
+@st.cache_resource(show_spinner=False)
+def _get_mcp_gateway():
+    """Persistent live MCP connection, cached across reruns.
+
+    Spawns the real `skill_server` subprocess once and keeps the stdio
+    session open. Returns None (cached) if the server can't start — e.g.
+    a sandboxed host that blocks subprocesses — so we don't retry the
+    spawn on every rerun and the UI degrades to in-process reads.
+    """
+    try:
+        return build_gateway()
+    except Exception as e:  # noqa: BLE001
+        import logging
+
+        logging.getLogger(__name__).warning("MCP gateway unavailable: %s", e)
+        return None
+
+
+def _skills_via_mcp_or_fallback() -> tuple[list[dict], bool]:
+    """Return (skills, used_mcp). Prefers the live MCP server; falls back
+    to the in-process mirror if the gateway is down."""
+    gw = _get_mcp_gateway()
+    if gw is not None:
+        try:
+            return gw.list_skills("active"), True
+        except Exception:  # noqa: BLE001 — fall through to in-process
+            pass
+    return list_skills(status="active"), False
+
+
+def _skill_md_via_mcp_or_fallback(name: str, used_mcp: bool) -> str:
+    """Read one skill's raw SKILL.md, preferring the same path the list used."""
+    if used_mcp:
+        gw = _get_mcp_gateway()
+        if gw is not None:
+            try:
+                return gw.read_skill_md(name)
+            except Exception:  # noqa: BLE001
+                pass
+    return read_skill_md(name)
+
+
 def _render_skill_library_sidebar() -> None:
     """Render the Skill Library panel in the Streamlit sidebar.
 
-    Pulls data through `src/skills/mcp_client.py` so the UI is already on
-    the same tool surface the MCP server will expose — swapping to a
-    transport-backed client later touches one import line.
+    Data path: the panel browses skills over a **live MCP connection** to
+    the custom FastMCP server (`src/mcp_servers/skill_server.py`) via
+    stdio. If the server subprocess can't start, it degrades to the
+    in-process `SkillRetriever` mirror and says so. The latency-sensitive
+    critic hot path stays in-process regardless — see HANDOFF for the
+    deliberate display-vs-hot-path layering.
     """
     st.sidebar.header(T["skill_lib_heading"])
     try:
-        skills = list_skills(status="active")
+        skills, used_mcp = _skills_via_mcp_or_fallback()
     except Exception:  # pragma: no cover — defensive
         st.sidebar.caption(T["skill_lib_load_failed"])
         return
 
+    # Connection indicator — visible proof the data came over MCP.
+    st.sidebar.caption(
+        T["skill_lib_mcp_connected"] if used_mcp else T["skill_lib_mcp_fallback"]
+    )
     st.sidebar.caption(T["skill_lib_caption"].format(n=len(skills)))
 
     for s in skills:
@@ -964,7 +1016,7 @@ def _render_skill_library_sidebar() -> None:
                     st.session_state[f"skill_body_open_{name}"] = True
                 if st.session_state.get(f"skill_body_open_{name}"):
                     try:
-                        raw = read_skill_md(name)
+                        raw = _skill_md_via_mcp_or_fallback(name, used_mcp)
                         body = raw
                         if raw.startswith("---"):
                             parts = raw.split("---", 2)
