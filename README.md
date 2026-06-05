@@ -92,8 +92,8 @@ Deep version with per-component trade-offs: [`docs/architecture.md`](docs/archit
 ## Quickstart
 
 ```bash
-git clone <repo>
-cd "PRD Stress Test Agent"
+git clone https://github.com/Uper56/PRD-Stress-Test-Agent
+cd PRD-Stress-Test-Agent
 pip install -e .
 pip install -r requirements.txt
 
@@ -119,7 +119,7 @@ streamlit run src/ui/streamlit_app.py      # 📊 Ablation tab loads latest.json
 
 ## Roadmap
 
-- **v2.0 — Embedding upgrade.** Replace difflib similarity at three call sites (cross-challenge convergence, skill retrieval ranking, distiller clustering, rubric matcher) with sentence-transformers cosine. Resolves debts D-01 / D-02 / D-10 / D-12 in one pass.
+- **v2.0 — Embedding upgrade.** Replace difflib similarity at four call sites (cross-challenge convergence, skill retrieval ranking, distiller clustering, rubric matcher) with sentence-transformers cosine. Resolves debts D-01 / D-02 / D-10 / D-12 in one pass.
 - **v2.1 — Confluence MCP.** A second MCP server that pulls real PRDs from a Confluence space, runs the pipeline, posts the verdict back as a comment. Closes the loop with where PRDs actually live.
 - **v2.2 — Multi-tenant skill marketplace.** `runtime_stats.yaml` keyed by team / domain so different orgs accumulate their own skill libraries without colliding. Discovery via the same MCP surface.
 
