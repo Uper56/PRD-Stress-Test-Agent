@@ -86,11 +86,18 @@ p, li, [data-testid='stCaptionContainer'] {{ font-family: var(--psa-body); line-
   background: var(--psa-sidebar);
   border-right: 1px solid color-mix(in oklch, var(--psa-sidebar) 70%, white);
 }}
-[data-testid='stSidebar'] * {{ color: var(--psa-sidebar-text); }}
-[data-testid='stSidebar'] [data-testid='stCaptionContainer'] {{ color: color-mix(in oklch, var(--psa-sidebar-text) 68%, transparent); }}
+[data-testid='stSidebar'] h1,
+[data-testid='stSidebar'] h2,
+[data-testid='stSidebar'] h3,
+[data-testid='stSidebar'] p,
+[data-testid='stSidebar'] label,
+[data-testid='stSidebar'] [data-testid='stMarkdownContainer'],
+[data-testid='stSidebar'] [data-testid='stMarkdownContainer'] * {{ color: var(--psa-sidebar-text) !important; }}
+[data-testid='stSidebar'] [data-testid='stCaptionContainer'],
+[data-testid='stSidebar'] [data-testid='stCaptionContainer'] * {{ color: color-mix(in oklch, var(--psa-sidebar-text) 72%, transparent) !important; }}
 [data-testid='stSidebar'] h2 {{ margin-top: 1.35rem !important; font-size: 1rem !important; }}
 [data-testid='stSidebar'] [data-testid='stExpander'] {{
-  background: color-mix(in oklch, var(--psa-sidebar-raised) 65%, transparent);
+  background: var(--psa-sidebar-raised);
   border: 1px solid color-mix(in oklch, var(--psa-sidebar-text) 12%, transparent);
   border-radius: 8px;
   margin-bottom: .45rem;
@@ -140,6 +147,42 @@ p, li, [data-testid='stCaptionContainer'] {{ font-family: var(--psa-body); line-
 }}
 [data-testid='stExpander'] {{ background: var(--psa-surface); border: 1px solid var(--psa-border) !important; border-radius: 8px; }}
 [data-testid='stMetric'] {{ background: var(--psa-surface); border: 1px solid var(--psa-border); border-radius: 8px; padding: 12px 14px; }}
+
+/* Sidebar controls share the dark shell.  This must come after the global
+   panel/control rules above: Streamlit containers are otherwise white, while
+   their sidebar copy is intentionally light. */
+[data-testid='stSidebar'] [data-testid='stVerticalBlockBorderWrapper'] {{
+  background: var(--psa-sidebar-raised) !important;
+  border-color: color-mix(in oklch, var(--psa-sidebar-text) 14%, transparent) !important;
+}}
+[data-testid='stSidebar'] [data-baseweb='select'] > div,
+[data-testid='stSidebar'] [data-baseweb='base-input'],
+[data-testid='stSidebar'] .stTextArea textarea,
+[data-testid='stSidebar'] .stTextInput input {{
+  background: var(--psa-sidebar-raised) !important;
+  border-color: color-mix(in oklch, var(--psa-sidebar-text) 20%, transparent) !important;
+  color: var(--psa-sidebar-text) !important;
+}}
+[data-testid='stSidebar'] [data-baseweb='select'] input,
+[data-testid='stSidebar'] [data-baseweb='select'] span,
+[data-testid='stSidebar'] [data-baseweb='select'] svg {{
+  color: var(--psa-sidebar-text) !important;
+  fill: var(--psa-sidebar-text) !important;
+}}
+[data-testid='stSidebar'] .stButton > button {{
+  background: var(--psa-sidebar-raised);
+  border-color: color-mix(in oklch, var(--psa-sidebar-text) 20%, transparent);
+  color: var(--psa-sidebar-text);
+}}
+[data-testid='stSidebar'] .stButton > button:hover:not(:disabled) {{
+  background: color-mix(in oklch, var(--psa-sidebar-raised) 82%, var(--psa-primary));
+  border-color: color-mix(in oklch, var(--psa-sidebar-text) 38%, transparent);
+}}
+[data-testid='stSidebar'] .stButton > button[kind='primary'] {{
+  background: var(--psa-primary);
+  border-color: var(--psa-primary);
+  color: white;
+}}
 
 /* Structured review components. */
 .psa-title-block {{ text-align: center; margin: 0 auto 1.4rem; max-width: 680px; }}
