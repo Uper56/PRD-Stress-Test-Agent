@@ -1,402 +1,262 @@
-"""Global visual system for the Streamlit app.
+"""Visual system for the Streamlit PRD Review Desk.
 
-Design language: **Modern tech / Blue-violet** preset from
-[garden-skills](https://github.com/ConardLi/garden-skills). Translated from
-that skill's HTML/CSS targeting into Streamlit-safe CSS injection.
-
-Palette is defined in **OKLCH** (perceptually uniform — derivatives stay
-harmonic across lightness/chroma shifts; you can't get the same property
-out of HSL or RGB-shifted palettes). Streamlit's `config.toml` accepts
-only hex, so the four base theme tokens are provided as hex
-approximations there; everything else (severity badges, dialog
-backgrounds, hover states, semantic colours) lives in injected CSS that
-the modern browser interprets natively.
-
-Anti-cliché checklist enforced here:
-  - No purple→pink→blue gradient backgrounds anywhere.
-  - No coloured left-border accent on cards (we use a top-border or a
-    flat background tint instead).
-  - No drawn SVG decorations — placeholders only.
-  - No "peak AI aesthetic" of Inter + Roboto everywhere; Space Grotesk
-    handles every display surface (h1-h3, badges), Inter only carries
-    body / caption text.
-  - Severity stays as flat text badges (P0 / P1 / P2), no emoji icons.
-  - Section markers (🎯 🧠 💡 📊 📚 🧪) are explicitly allowed by the
-    project's design brief and act as wayfinding, not decoration.
+The product is used by PMs reading dense documents and comparing findings for
+minutes at a time.  The UI therefore uses a calm light reading surface, an
+ink-blue sidebar, and blue-violet only for focus, state, and primary actions.
+All non-theme color values remain in OKLCH so derived tints stay perceptually
+consistent.
 """
 
 from __future__ import annotations
 
+import html
+
 import streamlit as st
 
 
-# ---------------------------------------------------------------------------
-# Palette — derived from primary `oklch(0.55 0.25 250)` (blue-violet).
-#
-# Use these as semantic names, not as raw values, in the rest of the UI.
-# When you need a new shade, derive it via oklch() in the same hue family
-# (250) — never mint a new hex out of thin air.
-# ---------------------------------------------------------------------------
-
 PALETTE = {
-    # Brand
-    "primary": "oklch(0.55 0.25 250)",            # blue-violet
-    "primary_hover": "oklch(0.62 0.23 250)",
-    "primary_subtle_bg": "oklch(0.95 0.04 250)",  # used on dark? no — for cards in light mode only
-    "primary_on_dark": "oklch(0.72 0.18 250)",    # higher L for dark surfaces
-
-    # Surface (dark mode default — matches existing config.toml choice)
-    "bg": "oklch(0.18 0.02 250)",
-    "surface": "oklch(0.22 0.02 250)",
-    "surface_raised": "oklch(0.26 0.02 250)",
-    "border": "oklch(0.32 0.02 250)",
-
-    # Text
-    "text": "oklch(0.96 0.01 250)",
-    "text_muted": "oklch(0.72 0.02 250)",
-    "text_subtle": "oklch(0.55 0.02 250)",
-
-    # Semantic — perceptually balanced, not pure-red / pure-yellow.
-    # Each holds the same L≈0.62 so badges look balanced side-by-side.
-    "severity_p0": "oklch(0.62 0.20 25)",   # warm red-orange
-    "severity_p1": "oklch(0.72 0.15 70)",   # amber
-    "severity_p2": "oklch(0.65 0.03 250)",  # cool neutral
-    "success": "oklch(0.65 0.15 150)",      # teal-green, not stoplight green
-    "info": "oklch(0.65 0.12 220)",         # close to primary hue, slightly cooler
+    "primary": "oklch(0.55 0.25 250)",
+    "primary_hover": "oklch(0.49 0.23 250)",
+    "primary_soft": "oklch(0.94 0.045 250)",
+    "canvas": "oklch(0.975 0.008 250)",
+    "surface": "oklch(1 0 0)",
+    "surface_tint": "oklch(0.965 0.012 250)",
+    "sidebar": "oklch(0.22 0.025 250)",
+    "sidebar_raised": "oklch(0.27 0.026 250)",
+    "border": "oklch(0.87 0.015 250)",
+    "text": "oklch(0.24 0.025 250)",
+    "muted": "oklch(0.48 0.025 250)",
+    "sidebar_text": "oklch(0.94 0.01 250)",
+    "p0": "oklch(0.57 0.20 27)",
+    "p1": "oklch(0.66 0.16 75)",
+    "p2": "oklch(0.54 0.035 250)",
+    "success": "oklch(0.53 0.13 155)",
 }
-
-
-# ---------------------------------------------------------------------------
-# CSS injection
-# ---------------------------------------------------------------------------
-
-# NOTE on font loading:
-# Streamlit's markdown sanitizer strips <link> and <style> tags (since
-# ~1.33) when passed through st.markdown(unsafe_allow_html=True), which
-# made the CSS render as a visible paragraph instead of styling the page.
-# We now inject through st.html() (which DOES preserve those tags) and
-# load fonts via `@import` INSIDE the <style> block — that way the whole
-# visual system is one self-contained HTML payload.
 
 
 def _build_css() -> str:
     p = PALETTE
     return f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 
 :root {{
-  --color-primary: {p["primary"]};
-  --color-primary-hover: {p["primary_hover"]};
-  --color-primary-on-dark: {p["primary_on_dark"]};
-  --color-bg: {p["bg"]};
-  --color-surface: {p["surface"]};
-  --color-surface-raised: {p["surface_raised"]};
-  --color-border: {p["border"]};
-  --color-text: {p["text"]};
-  --color-text-muted: {p["text_muted"]};
-  --color-text-subtle: {p["text_subtle"]};
-  --color-p0: {p["severity_p0"]};
-  --color-p1: {p["severity_p1"]};
-  --color-p2: {p["severity_p2"]};
-  --color-success: {p["success"]};
-  --color-info: {p["info"]};
-
-  --font-display: 'Space Grotesk', ui-sans-serif, sans-serif;
-  --font-body: 'Inter', ui-sans-serif, sans-serif;
+  --psa-primary: {p['primary']};
+  --psa-primary-hover: {p['primary_hover']};
+  --psa-primary-soft: {p['primary_soft']};
+  --psa-canvas: {p['canvas']};
+  --psa-surface: {p['surface']};
+  --psa-surface-tint: {p['surface_tint']};
+  --psa-sidebar: {p['sidebar']};
+  --psa-sidebar-raised: {p['sidebar_raised']};
+  --psa-border: {p['border']};
+  --psa-text: {p['text']};
+  --psa-muted: {p['muted']};
+  --psa-sidebar-text: {p['sidebar_text']};
+  --psa-p0: {p['p0']};
+  --psa-p1: {p['p1']};
+  --psa-p2: {p['p2']};
+  --psa-success: {p['success']};
+  --psa-display: 'Space Grotesk', 'Inter', sans-serif;
+  --psa-body: 'Inter', ui-sans-serif, sans-serif;
 }}
 
-/* ------- typography ----------------------------------------------------- */
+html, body, .stApp, [data-testid='stAppViewContainer'] {{
+  font-family: var(--psa-body);
+  background: var(--psa-canvas);
+  color: var(--psa-text);
+}}
+[data-testid='stAppViewContainer'] > .main {{ background: var(--psa-canvas); }}
+[data-testid='stMainBlockContainer'] {{ max-width: 1180px; padding-top: 2.1rem; padding-bottom: 4rem; }}
 
-html, body, .stApp,
-[data-testid="stAppViewContainer"],
-[data-testid="stMarkdownContainer"] p,
-[data-testid="stMarkdownContainer"] li,
-.stButton > button,
-.stTextArea textarea,
-.stTextInput input,
-[data-testid="stSidebar"] {{
-  font-family: var(--font-body);
-  text-wrap: pretty;
+/* Typography: display font only for hierarchy, compact sans everywhere else. */
+h1, h2, h3, h4, .stTabs [data-baseweb='tab'] p, [data-testid='stMetricLabel'], [data-testid='stMetricValue'] {{
+  font-family: var(--psa-display) !important;
+  color: var(--psa-text);
+  letter-spacing: -0.02em;
 }}
+h1 {{ font-size: 2.25rem !important; line-height: 1.12 !important; text-align: center; margin-bottom: .35rem !important; }}
+h2 {{ font-size: 1.35rem !important; line-height: 1.25 !important; margin-top: 1.85rem !important; }}
+h3 {{ font-size: 1.08rem !important; }}
+p, li, [data-testid='stCaptionContainer'] {{ font-family: var(--psa-body); line-height: 1.6; }}
+[data-testid='stCaptionContainer'] {{ color: var(--psa-muted); }}
 
-/* Display surfaces use Space Grotesk for the 4-6× scale contrast garden-skills
-   prescribes between h1 and body.  clamp() keeps the title readable on
-   narrow viewports without over-shrinking. */
-[data-testid="stMarkdownContainer"] h1,
-[data-testid="stMarkdownContainer"] h2,
-[data-testid="stMarkdownContainer"] h3,
-[data-testid="stMarkdownContainer"] h4,
-.stTabs [data-baseweb="tab"] p,
-[data-testid="stMetric"] [data-testid="stMetricLabel"],
-[data-testid="stMetric"] [data-testid="stMetricValue"] {{
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
+/* The app shell. */
+[data-testid='stSidebar'] {{
+  background: var(--psa-sidebar);
+  border-right: 1px solid color-mix(in oklch, var(--psa-sidebar) 70%, white);
 }}
-[data-testid="stMarkdownContainer"] h1 {{
-  font-size: clamp(1.9rem, 2.6vw, 2.6rem);
-  font-weight: 700;
-  line-height: 1.15;
-}}
-[data-testid="stMarkdownContainer"] h2 {{
-  font-size: clamp(1.35rem, 1.8vw, 1.65rem);
-  font-weight: 600;
-  margin-top: 1.5rem;
-}}
-[data-testid="stMarkdownContainer"] h3 {{
-  font-size: 1.15rem;
-  font-weight: 600;
-}}
-[data-testid="stMarkdownContainer"] p,
-[data-testid="stMarkdownContainer"] li {{
-  font-size: 1rem;
-  line-height: 1.55;
-  color: var(--color-text);
-}}
-
-/* ------- buttons -------------------------------------------------------- */
-/* Flat, no gradient, no large radius. Hover = colour shift, not a glow. */
-
-.stButton > button {{
-  font-family: var(--font-body);
-  font-weight: 500;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
-  transition: background-color 120ms ease, border-color 120ms ease;
-}}
-.stButton > button:hover:not(:disabled) {{
-  border-color: var(--color-primary-on-dark);
-  background: var(--color-surface-raised);
-}}
-.stButton > button[kind="primary"] {{
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: white;
-}}
-.stButton > button[kind="primary"]:hover:not(:disabled) {{
-  background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
-}}
-.stButton > button:disabled {{
-  opacity: 0.45;
-}}
-
-/* ------- title + compliance badge wrapper ------------------------------- */
-
-/* Centre the top-of-page title block (heading + compliance pill) so the
-   page has a clear visual anchor instead of left-rag chrome. */
-.psa-title-block {{
-  text-align: center;
-  margin: 0.5rem 0 1.25rem;
-}}
-/* Streamlit emits the title via st.title → an h1 inside the main
-   container. We center any h1 sitting directly under stMainBlockContainer
-   (the actual class name) without affecting headings inside expanders. */
-[data-testid="stAppViewContainer"] > .main h1,
-[data-testid="stMainBlockContainer"] > div > .stMarkdown h1 {{
-  text-align: center;
-}}
-
-.psa-compliance-badge {{
-  display: inline-block;
-  font-family: var(--font-display);
-  font-size: 0.78rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--color-primary) 18%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-primary) 40%, transparent);
-  color: var(--color-text);
-}}
-
-/* ------- severity tag (used by critique cards) -------------------------- */
-
-.psa-severity {{
-  display: inline-block;
-  font-family: var(--font-display);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  padding: 2px 8px;
-  border-radius: 4px;
-  color: white;
-}}
-.psa-severity--p0 {{ background: var(--color-p0); }}
-.psa-severity--p1 {{ background: var(--color-p1); }}
-.psa-severity--p2 {{ background: var(--color-p2); }}
-
-/* ------- skill chip ----------------------------------------------------- */
-/* Replaces the previous yellow chip; uses primary tone instead of
-   stoplight yellow to stay on-palette. */
-
-.psa-skill-chip {{
-  display: inline-block;
-  font-family: var(--font-body);
-  font-size: 0.78rem;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--color-primary) 14%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-primary) 36%, transparent);
-  color: var(--color-text);
-}}
-.psa-skill-chip code {{
-  background: transparent;
-  color: var(--color-primary-on-dark);
-  padding: 0;
-}}
-
-/* ------- dialog panel --------------------------------------------------- */
-/* Forbidden by garden-skills: coloured LEFT-border accent.
-   We use a flat background tint + top-border instead. */
-
-.psa-dialog-panel {{
-  background: color-mix(in oklch, var(--color-primary) 10%, transparent);
-  border-top: 2px solid var(--color-primary-on-dark);
-  border-radius: 0 0 6px 6px;
-  padding: 8px 14px;
-  margin: 6px 0;
-  font-family: var(--font-body);
-}}
-.psa-dialog-panel code {{
-  font-size: 0.85em;
-  color: var(--color-primary-on-dark);
-}}
-
-/* ------- supervisor thinking trace -------------------------------------- */
-
-.psa-thinking {{
-  font-family: var(--font-body);
-  font-style: italic;
-  color: var(--color-text-muted);
-  white-space: pre-wrap;
-  line-height: 1.5;
-}}
-
-/* ------- sidebar separator + headers ------------------------------------ */
-
-[data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3 {{
-  font-family: var(--font-display);
-  letter-spacing: -0.005em;
-}}
-
-/* Streamlit's default expander has a subtle bottom border that fights with
-   the surface palette; tighten it. */
-[data-testid="stExpander"] {{
-  border-color: var(--color-border) !important;
-}}
-
-/* ------- metric cards (Ablation tab) ------------------------------------ */
-
-[data-testid="stMetric"] {{
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+[data-testid='stSidebar'] * {{ color: var(--psa-sidebar-text); }}
+[data-testid='stSidebar'] [data-testid='stCaptionContainer'] {{ color: color-mix(in oklch, var(--psa-sidebar-text) 68%, transparent); }}
+[data-testid='stSidebar'] h2 {{ margin-top: 1.35rem !important; font-size: 1rem !important; }}
+[data-testid='stSidebar'] [data-testid='stExpander'] {{
+  background: color-mix(in oklch, var(--psa-sidebar-raised) 65%, transparent);
+  border: 1px solid color-mix(in oklch, var(--psa-sidebar-text) 12%, transparent);
   border-radius: 8px;
-  padding: 10px 14px;
+  margin-bottom: .45rem;
 }}
 
-/* ------- tabs ----------------------------------------------------------- */
+/* Tabs behave as a compact navigation bar, not oversized pills. */
+.stTabs [data-baseweb='tab-list'] {{ gap: 1.25rem; border-bottom: 1px solid var(--psa-border); }}
+.stTabs [data-baseweb='tab'] {{
+  height: 42px;
+  padding: 0 2px;
+  background: transparent;
+  border: 0;
+  font-size: .93rem;
+}}
+.stTabs [aria-selected='true'] {{ color: var(--psa-primary) !important; }}
+.stTabs [data-baseweb='tab-highlight'] {{ background-color: var(--psa-primary) !important; height: 2px !important; }}
 
-.stTabs [data-baseweb="tab"] {{
-  font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: -0.005em;
+/* Inputs and buttons: conventional, high-contrast product controls. */
+.stTextArea textarea, .stTextInput input, [data-baseweb='select'] > div, [data-baseweb='base-input'] {{
+  background: var(--psa-surface) !important;
+  border-color: var(--psa-border) !important;
+  color: var(--psa-text) !important;
+  border-radius: 8px !important;
 }}
-.stTabs [data-baseweb="tab"][aria-selected="true"] {{
-  color: var(--color-primary-on-dark);
+.stTextArea textarea:focus, .stTextInput input:focus {{ border-color: var(--psa-primary) !important; box-shadow: 0 0 0 3px color-mix(in oklch, var(--psa-primary) 16%, transparent) !important; }}
+.stButton > button {{
+  min-height: 38px;
+  border-radius: 7px;
+  border: 1px solid var(--psa-border);
+  background: var(--psa-surface);
+  color: var(--psa-text);
+  font-family: var(--psa-body);
+  font-weight: 600;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
 }}
+.stButton > button:hover:not(:disabled) {{ background: var(--psa-surface-tint); border-color: var(--psa-primary); transform: translateY(-1px); }}
+.stButton > button[kind='primary'] {{ background: var(--psa-primary); border-color: var(--psa-primary); color: white; }}
+.stButton > button[kind='primary']:hover:not(:disabled) {{ background: var(--psa-primary-hover); border-color: var(--psa-primary-hover); }}
+.stButton > button:focus-visible {{ outline: 3px solid color-mix(in oklch, var(--psa-primary) 30%, transparent); outline-offset: 2px; }}
+
+/* Containers become quiet document panels, not decorative cards. */
+[data-testid='stVerticalBlockBorderWrapper'] {{
+  background: var(--psa-surface);
+  border: 1px solid var(--psa-border) !important;
+  border-radius: 10px;
+  box-shadow: none !important;
+}}
+[data-testid='stExpander'] {{ background: var(--psa-surface); border: 1px solid var(--psa-border) !important; border-radius: 8px; }}
+[data-testid='stMetric'] {{ background: var(--psa-surface); border: 1px solid var(--psa-border); border-radius: 8px; padding: 12px 14px; }}
+
+/* Structured review components. */
+.psa-title-block {{ text-align: center; margin: 0 auto 1.4rem; max-width: 680px; }}
+.psa-subtitle {{ color: var(--psa-muted); font-size: .98rem; margin: 0; }}
+.psa-review-intro {{ padding: .25rem 0 .8rem; margin: .2rem 0 .2rem; }}
+.psa-review-composer__kicker {{ color: var(--psa-primary); font-family: var(--psa-display); font-size: .82rem; font-weight: 700; letter-spacing: .02em; margin-bottom: .28rem; }}
+.psa-review-composer__title {{ font-family: var(--psa-display); font-size: 1.2rem; font-weight: 600; margin: 0; }}
+.psa-review-composer__hint {{ color: var(--psa-muted); margin: .3rem 0 0; font-size: .9rem; }}
+.psa-dialog-panel {{ background: var(--psa-surface-tint); border-top: 2px solid var(--psa-primary); border-radius: 0 0 8px 8px; padding: .7rem .9rem; margin: .3rem 0 .7rem; }}
+.psa-run-summary {{
+  display: flex; gap: .7rem; flex-wrap: wrap; align-items: center;
+  background: var(--psa-primary-soft); border: 1px solid color-mix(in oklch, var(--psa-primary) 22%, var(--psa-border));
+  border-radius: 9px; padding: .75rem .9rem; margin: .4rem 0 1.2rem;
+  color: var(--psa-text);
+}}
+.psa-run-summary strong {{ font-family: var(--psa-display); }}
+.psa-severity {{ display: inline-flex; align-items: center; font-family: var(--psa-display); font-size: .74rem; font-weight: 700; letter-spacing: .04em; padding: 3px 7px; border-radius: 4px; color: white; }}
+.psa-severity--p0 {{ background: var(--psa-p0); }}
+.psa-severity--p1 {{ background: var(--psa-p1); }}
+.psa-severity--p2 {{ background: var(--psa-p2); }}
+.psa-skill-chip {{ display: inline-block; font-size: .76rem; padding: 3px 8px; border-radius: 999px; background: var(--psa-primary-soft); color: var(--psa-primary-hover); border: 1px solid color-mix(in oklch, var(--psa-primary) 18%, var(--psa-border)); }}
+.psa-skill-chip code {{ color: inherit; background: transparent; padding: 0; }}
+.psa-critique-header {{ display: flex; align-items: flex-start; gap: .6rem; margin-bottom: .65rem; }}
+.psa-critique-title {{ font-family: var(--psa-display); font-weight: 600; line-height: 1.45; color: var(--psa-text); }}
+.psa-critique-meta {{ color: var(--psa-muted); font-size: .76rem; margin-bottom: .55rem; }}
+.psa-field-label {{ font-size: .75rem; font-family: var(--psa-display); font-weight: 700; color: var(--psa-muted); letter-spacing: .02em; margin-bottom: .2rem; }}
+.psa-field-value {{ color: var(--psa-text); font-size: .9rem; line-height: 1.55; }}
+.psa-verdict-shell {{ background: var(--psa-surface); border: 1px solid var(--psa-border); border-radius: 12px; padding: 1.25rem; margin: .45rem 0 1rem; }}
+.psa-verdict-summary {{ font-family: var(--psa-display); font-size: 1.08rem; line-height: 1.5; margin: 0 0 1rem; }}
+.psa-thinking {{ color: var(--psa-muted); font-size: .88rem; line-height: 1.55; white-space: pre-wrap; background: var(--psa-surface-tint); border-radius: 8px; padding: .75rem .9rem; }}
+.psa-demo-banner {{ background: var(--psa-surface-tint); border: 1px solid var(--psa-border); border-radius: 8px; padding: .52rem .75rem; color: var(--psa-muted); font-size: .82rem; text-align: center; margin-bottom: 1rem; }}
+
+@media (max-width: 760px) {{
+  [data-testid='stMainBlockContainer'] {{ padding: 1.1rem 1rem 3rem; }}
+  h1 {{ font-size: 1.8rem !important; }}
+  .psa-review-intro {{ padding: .1rem 0 .7rem; }}
+}}
+@media (prefers-reduced-motion: reduce) {{ * {{ transition: none !important; }} }}
 </style>
 """
 
 
 def inject_global_css() -> None:
-    """Inject the global visual system. Call once at the top of `main()`.
-
-    Uses `st.html()` rather than `st.markdown(unsafe_allow_html=True)`
-    because the latter strips `<style>` and `<link>` tags as of Streamlit
-    ~1.33 — which caused the entire CSS payload to render as a visible
-    paragraph in earlier builds of this module.
-    """
+    """Inject the review-desk theme once at app startup."""
     st.html(_build_css())
 
 
-def compliance_badge_block_html(label: str) -> str:
-    """Centred title-block companion to the page title.
+def subtitle_block_html(label: str) -> str:
+    return f'<div class="psa-title-block"><p class="psa-subtitle">{html.escape(label)}</p></div>'
 
-    Wraps the compliance pill in a centred container so it sits directly
-    under the centred h1.
-    """
+
+def review_composer_html(kicker: str, title: str, hint: str) -> str:
     return (
-        f'<div class="psa-title-block">'
-        f'<span class="psa-compliance-badge">{label}</span>'
-        f"</div>"
+        '<div class="psa-review-intro">'
+        f'<div class="psa-review-composer__kicker">{html.escape(kicker)}</div>'
+        f'<p class="psa-review-composer__title">{html.escape(title)}</p>'
+        f'<p class="psa-review-composer__hint">{html.escape(hint)}</p>'
+        '</div>'
+    )
+
+
+def run_summary_html(claims: int, critiques: int) -> str:
+    return (
+        '<div class="psa-run-summary">'
+        '<strong>评审完成</strong>'
+        f'<span>Intake 抽取 {claims} 条 claim</span>'
+        f'<span>·</span><span>Critic 识别 {critiques} 条 finding</span>'
+        '</div>'
     )
 
 
 def severity_badge_html(severity: str) -> str:
-    """Render a severity badge using the visual-system class names.
-
-    Centralised so every call site looks the same and the `style=` blob
-    we used to inline at every render goes away. Falls back gracefully
-    on unknown severities.
-    """
     sev = severity.upper() if isinstance(severity, str) else "?"
     klass = f"psa-severity--{sev.lower()}" if sev in {"P0", "P1", "P2"} else ""
-    return (
-        f'<span class="psa-severity {klass}">{sev}</span>'
-        if klass
-        else f'<span class="psa-severity">{sev}</span>'
-    )
+    return f'<span class="psa-severity {klass}">{html.escape(sev)}</span>'
 
 
 def skill_chip_html(skill_id: str) -> str:
-    """Render a 'Triggered by skill' chip in the on-palette style."""
+    return f'<span class="psa-skill-chip">Skill · <code>{html.escape(skill_id)}</code></span>'
+
+
+def critique_header_html(severity: str, finding: str, claim_id: str, skill_id: str | None) -> str:
+    skill = skill_chip_html(skill_id) if skill_id else ""
     return (
-        f'<span class="psa-skill-chip">'
-        f'<span style="opacity:0.75;margin-right:4px;">↳ skill</span>'
-        f'<code>{skill_id}</code>'
-        f"</span>"
+        '<div class="psa-critique-header">'
+        f'{severity_badge_html(severity)}'
+        f'<div><div class="psa-critique-title">{html.escape(finding)}</div>'
+        f'<div class="psa-critique-meta">claim_id: {html.escape(claim_id)} &nbsp; {skill}</div></div>'
+        '</div>'
     )
 
 
-def compliance_badge_html(label: str) -> str:
-    """Render the top-of-page Anthropic-spec compliance badge."""
-    return f'<span class="psa-compliance-badge">{label}</span>'
-
-
-def dialog_panel_open_html(critic_id: str, *, prefix: str = "Follow-up with") -> str:
-    """Open tag for the inline critique-dialog panel.
-
-    `prefix` is the heading text shown before the critic id, e.g.
-    "Follow-up with" or its Chinese equivalent "继续追问". Keeping it
-    parameterised means styles.py stays language-agnostic.
-
-    The panel uses a flat background tint + top-border instead of the
-    AI-cliché coloured left-border accent.
-    """
+def field_html(label: str, value: str) -> str:
     return (
-        f'<div class="psa-dialog-panel">'
-        f"<b>{prefix} <code>{critic_id}</code></b>"
-        f"</div>"
+        f'<div class="psa-field-label">{html.escape(label)}</div>'
+        f'<div class="psa-field-value">{html.escape(value)}</div>'
     )
+
+
+def verdict_open_html() -> str:
+    return '<div class="psa-verdict-shell">'
+
+
+def verdict_close_html() -> str:
+    return '</div>'
+
+
+def verdict_summary_html(text: str) -> str:
+    return f'<p class="psa-verdict-summary">{html.escape(text)}</p>'
+
+
+def dialog_panel_open_html(critic_id: str, *, prefix: str = "继续追问") -> str:
+    return f'<div class="psa-dialog-panel"><strong>{html.escape(prefix)} {html.escape(critic_id)}</strong></div>'
 
 
 def thinking_html(text: str, *, in_progress: bool, label: str | None = None) -> str:
-    """Render the supervisor's `<thinking>` trace with our typography.
-
-    `in_progress=True` appends a cursor glyph; `False` freezes the trace
-    once streaming has finished. `label` lets the caller substitute a
-    translated heading (e.g. the Chinese "推理中…" / "推理（完成）") while
-    keeping this module language-agnostic.
-    """
     if label is None:
-        label = "Thinking…" if in_progress else "Thinking (done)"
-    cursor = "▍" if in_progress else ""
-    return (
-        f'<div class="psa-thinking">'
-        f"<b>{label}</b> {text}{cursor}"
-        f"</div>"
-    )
+        label = "推理中" if in_progress else "推理过程"
+    cursor = " ▌" if in_progress else ""
+    return f'<div class="psa-thinking"><strong>{html.escape(label)}</strong><br>{html.escape(text)}{cursor}</div>'

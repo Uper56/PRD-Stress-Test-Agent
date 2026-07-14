@@ -48,12 +48,16 @@ from src.ui.rate_limit import (
     detect_ip,
 )
 from src.ui.styles import (
-    compliance_badge_block_html,
+    critique_header_html,
     dialog_panel_open_html,
+    field_html,
     inject_global_css,
+    review_composer_html,
+    run_summary_html,
     severity_badge_html,
-    skill_chip_html,
+    subtitle_block_html,
     thinking_html,
+    verdict_summary_html,
 )
 
 
@@ -93,6 +97,9 @@ T = {
 
     # ---- Main input section --------------------------------------------------
     "input_heading": "输入",
+    "composer_kicker": "评审工作台",
+    "composer_title": "把 PRD 放进来，先看风险，再看证据。",
+    "composer_hint": "支持粘贴内容、选择示例或上传 PDF / Word 文档。",
     "prd_source_label": "PRD 来源",
     "prd_source_paste": "粘贴文本",
     "prd_source_golden": "选择内置 PRD",
@@ -162,6 +169,7 @@ T = {
     "history_load_failed": "无法加载历史记录",
     "history_empty": "还没跑过评审 —— 点上方「开始评审」试一下",
     "history_count": "最近 {n} 次评审",
+    "history_select_label": "选择一份历史 PRD",
     "history_run_title": "{ts} · {filename}",
     "history_run_filename_default": "自定义 PRD",
     "history_run_caption": "P0 {p0} · P1 {p1} · P2 {p2}",
@@ -173,6 +181,7 @@ T = {
     "skill_lib_heading": "📚 Skill 库",
     "skill_lib_load_failed": "Skill 库加载失败",
     "skill_lib_caption": "{n} 个 Skill 启用中",
+    "skill_lib_select_label": "选择一个 Skill 查看详情",
     "skill_lib_mcp_connected": "🔌 Connected via MCP (FastMCP · stdio)",
     "skill_lib_mcp_fallback": "⚠️ MCP connection unavailable, using local fallback",
     "skill_lib_expander_label": "{name}",
@@ -310,68 +319,78 @@ def _critique_uid(c: dict) -> str:
 def _render_critique(c: dict) -> None:
     sev = c.get("severity", "P?")
     uid = _critique_uid(c)
-
-    st.markdown(
-        f"{severity_badge_html(sev)} <b>{c.get('finding', '')}</b>",
-        unsafe_allow_html=True,
-    )
-    st.caption(
-        f"claim_id: {c.get('claim_id', '?')}  ·  "
-        f"skill_id: {c.get('skill_id') or '—'}"
-    )
-    # Skill chip — links this critique back to the skill that fired.
     skill_id = c.get("skill_id")
-    if skill_id:
-        st.markdown(skill_chip_html(skill_id), unsafe_allow_html=True)
-
-    st.markdown(T["critique_evidence_prefix"].format(text=c.get("evidence", "")))
-    st.markdown(T["critique_fix_prefix"].format(text=c.get("suggested_fix", "")))
-
-    # HITL feedback row — only meaningful when a skill_id is attached.
-    if skill_id:
-        feedback = st.session_state.setdefault("critique_feedback", {})
-        already = feedback.get(uid)
-        col_yes, col_no, col_status = st.columns([1, 1, 4])
-        if col_yes.button(T["btn_feedback_useful"], key=f"fb_yes_{uid}", disabled=already is not None):
-            try:
-                SkillCurator().update_acceptance(skill_id, accepted=True)
-                feedback[uid] = "accepted"
-                st.rerun()
-            except Exception as e:  # pragma: no cover
-                st.warning(T["feedback_failed"].format(error=e))
-        if col_no.button(T["btn_feedback_noise"], key=f"fb_no_{uid}", disabled=already is not None):
-            try:
-                SkillCurator().update_acceptance(skill_id, accepted=False)
-                feedback[uid] = "rejected"
-                st.rerun()
-            except Exception as e:  # pragma: no cover
-                st.warning(T["feedback_failed"].format(error=e))
-        if already == "accepted":
-            col_status.success(T["feedback_recorded_useful"])
-        elif already == "rejected":
-            col_status.info(T["feedback_recorded_noise"])
-
-    # Discuss button — opens a dialog for this critique.
     active = st.session_state.get("active_dialogs", {})
     is_open = uid in active
-    label = T["btn_discuss_close"] if is_open else T["btn_discuss_open"]
-    if st.button(label, key=f"discuss_btn_{uid}"):
-        dialogs = st.session_state.setdefault("active_dialogs", {})
-        if is_open:
-            dialogs.pop(uid, None)
+
+    with st.container(border=True):
+        st.markdown(
+            critique_header_html(
+                sev,
+                c.get("finding", ""),
+                c.get("claim_id", "?"),
+                skill_id,
+            ),
+            unsafe_allow_html=True,
+        )
+        evidence_col, fix_col = st.columns(2)
+        with evidence_col:
+            st.markdown(
+                field_html("原文依据", c.get("evidence", "")),
+                unsafe_allow_html=True,
+            )
+        with fix_col:
+            st.markdown(
+                field_html("建议改进", c.get("suggested_fix", "")),
+                unsafe_allow_html=True,
+            )
+
+        action_cols = st.columns([1, 1, 1, 4]) if skill_id else st.columns([1, 4])
+        if skill_id:
+            feedback = st.session_state.setdefault("critique_feedback", {})
+            already = feedback.get(uid)
+            if action_cols[0].button(
+                T["btn_feedback_useful"], key=f"fb_yes_{uid}", disabled=already is not None
+            ):
+                try:
+                    SkillCurator().update_acceptance(skill_id, accepted=True)
+                    feedback[uid] = "accepted"
+                    st.rerun()
+                except Exception as e:  # pragma: no cover
+                    st.warning(T["feedback_failed"].format(error=e))
+            if action_cols[1].button(
+                T["btn_feedback_noise"], key=f"fb_no_{uid}", disabled=already is not None
+            ):
+                try:
+                    SkillCurator().update_acceptance(skill_id, accepted=False)
+                    feedback[uid] = "rejected"
+                    st.rerun()
+                except Exception as e:  # pragma: no cover
+                    st.warning(T["feedback_failed"].format(error=e))
+            if already == "accepted":
+                action_cols[2].caption("已采纳")
+            elif already == "rejected":
+                action_cols[2].caption("标记为误报")
+            discuss_col = action_cols[3]
         else:
-            dialogs[uid] = {
-                "critic_id": c.get("critic_id", "unknown"),
-                "critique": c,
-                "history": [],
-                "rounds": 0,
-            }
-        st.rerun()
+            discuss_col = action_cols[0]
 
-    if is_open:
-        _render_dialog_panel(uid, active[uid])
+        label = T["btn_discuss_close"] if is_open else T["btn_discuss_open"]
+        if discuss_col.button(label, key=f"discuss_btn_{uid}"):
+            dialogs = st.session_state.setdefault("active_dialogs", {})
+            if is_open:
+                dialogs.pop(uid, None)
+            else:
+                dialogs[uid] = {
+                    "critic_id": c.get("critic_id", "unknown"),
+                    "critique": c,
+                    "history": [],
+                    "rounds": 0,
+                }
+            st.rerun()
 
-    st.divider()
+        if is_open:
+            _render_dialog_panel(uid, active[uid])
 
 
 def _render_dialog_panel(uid: str, dialog: dict) -> None:
@@ -456,34 +475,39 @@ def _render_dialog_panel(uid: str, dialog: dict) -> None:
 
 
 def _render_verdict(verdict: dict) -> None:
-    st.markdown(T["verdict_executive_summary"])
-    st.info(verdict.get("executive_summary", "—"))
-
-    # Use the shared severity badge so verdict headings track palette
-    # changes from one place (src/ui/styles.py) instead of three.
-    groups = [
-        (T["verdict_p0_blockers"], "p0_blockers", "P0"),
-        (T["verdict_p1_concerns"], "p1_concerns", "P1"),
-        (T["verdict_p2_suggestions"], "p2_suggestions", "P2"),
-    ]
-    for label, key, sev in groups:
-        items = verdict.get(key, []) or []
+    with st.container(border=True):
+        st.markdown(T["verdict_executive_summary"])
         st.markdown(
-            f"{severity_badge_html(sev)} <b>{label}</b> &nbsp; "
-            f"<span style='opacity:0.7'>({len(items)})</span>",
+            verdict_summary_html(verdict.get("executive_summary", "—")),
             unsafe_allow_html=True,
         )
-        if not items:
-            st.caption(T["verdict_none"])
-        else:
-            for item in items:
-                st.markdown(f"- {item}")
 
-    conflicts = verdict.get("conflict_resolutions", []) or []
-    if conflicts:
-        st.markdown(T["verdict_conflicts_heading"])
-        for c in conflicts:
-            st.markdown(f"- {c}")
+        groups = [
+            (T["verdict_p0_blockers"], "p0_blockers", "P0"),
+            (T["verdict_p1_concerns"], "p1_concerns", "P1"),
+            (T["verdict_p2_suggestions"], "p2_suggestions", "P2"),
+        ]
+        columns = st.columns(3)
+        for column, (label, key, sev) in zip(columns, groups):
+            items = verdict.get(key, []) or []
+            with column:
+                st.markdown(
+                    f"{severity_badge_html(sev)} <b>{label}</b> "
+                    f"<span style='opacity:0.7'>({len(items)})</span>",
+                    unsafe_allow_html=True,
+                )
+                if not items:
+                    st.caption(T["verdict_none"])
+                else:
+                    for item in items:
+                        st.markdown(f"- {item}")
+
+        conflicts = verdict.get("conflict_resolutions", []) or []
+        if conflicts:
+            st.divider()
+            st.markdown(T["verdict_conflicts_heading"])
+            for c in conflicts:
+                st.markdown(f"- {c}")
 
 
 def _stream_supervisor_sync(state: dict, llm, thinking_box) -> tuple[str, dict]:
@@ -593,15 +617,28 @@ def _run_and_cache(prd_text: str, *, prd_filename: str | None = None) -> None:
 
 def _render_run(run: dict) -> None:
     """Render a completed run from session_state (no LLM work done here)."""
-    st.success(
-        T["summary_intake"].format(
-            claims=run["claim_count"], critiques=len(run["critiques"])
-        )
-    )
-
     by_critic: dict[str, list[dict]] = {k: [] for k, _ in CRITIC_TABS}
     for d in run["critiques"]:
         by_critic.setdefault(d.get("critic_id", "unknown"), []).append(d)
+
+    st.markdown(
+        run_summary_html(run["claim_count"], len(run["critiques"])),
+        unsafe_allow_html=True,
+    )
+    st.subheader(T["supervisor_heading"])
+    _render_verdict(run.get("verdict") or {})
+
+    thinking_text = run.get("thinking_text") or ""
+    if thinking_text:
+        with st.expander(T["supervisor_thinking_done"], expanded=False):
+            st.markdown(
+                thinking_html(
+                    thinking_text,
+                    in_progress=False,
+                    label=T["supervisor_thinking_done"],
+                ),
+                unsafe_allow_html=True,
+            )
 
     st.subheader(T["critic_findings_heading"])
     tabs = st.tabs([label for _, label in CRITIC_TABS])
@@ -613,59 +650,37 @@ def _render_run(run: dict) -> None:
             for item in items:
                 _render_critique(item)
 
-    # ---- Cross-Challenge section --------------------------------------------
-    st.subheader(T["cross_challenge_heading"])
+    # Supporting evidence: intentionally secondary to the verdict and critique tabs.
     rounds = run["challenge_round"]
-    if run["converged"]:
-        st.success(T["cross_converged"].format(rounds=rounds))
-    else:
-        st.warning(T["cross_not_converged"].format(rounds=rounds))
-
     challenges_raw = run["challenges"]
     by_round: dict[int, list[dict]] = {}
     for d in challenges_raw:
         by_round.setdefault(d.get("round", 0), []).append(d)
 
-    if not challenges_raw:
-        st.caption(T["cross_no_challenges"])
-    else:
-        for rn in sorted(by_round.keys()):
-            items = by_round[rn]
-            with st.expander(
-                T["cross_round_title"].format(round=rn, n=len(items)),
-                expanded=False,
-            ):
+    with st.expander(
+        f"{T['cross_challenge_heading']} · {len(challenges_raw)} 条记录",
+        expanded=False,
+    ):
+        if run["converged"]:
+            st.success(T["cross_converged"].format(rounds=rounds))
+        else:
+            st.warning(T["cross_not_converged"].format(rounds=rounds))
+        if not challenges_raw:
+            st.caption(T["cross_no_challenges"])
+        else:
+            for rn in sorted(by_round.keys()):
+                items = by_round[rn]
+                st.markdown(T["cross_round_title"].format(round=rn, n=len(items)))
                 for ch in items:
                     st.markdown(
                         f"**{ch.get('challenger', '?')}** → "
                         f"`{ch.get('target_critique_id', '?')}`"
                     )
-                    st.markdown(f"↪ {ch.get('counter_finding', '')}")
-                    st.divider()
-
-    # ---- Supervisor verdict (cached from the one-time stream) ---------------
-    st.subheader(T["supervisor_heading"])
-    thinking_text = run.get("thinking_text") or ""
-    if thinking_text:
-        st.markdown(
-            thinking_html(
-                thinking_text,
-                in_progress=False,
-                label=T["supervisor_thinking_done"],
-            ),
-            unsafe_allow_html=True,
-        )
-    st.markdown(T["verdict_heading"])
-    _render_verdict(run.get("verdict") or {})
+                    st.caption(ch.get("counter_finding", ""))
 
 
 def _render_run_history_sidebar() -> None:
-    """User-friendly recent-evaluations panel.
-
-    Default view shows just date + PRD name + a one-line severity count.
-    Tech-y stuff (skill_id chips per critique, individual critic ownership)
-    is hidden in an inner expander so the casual visitor sees a clean list.
-    """
+    """Compact history browser; details appear only after a run is selected."""
     st.sidebar.header(T["history_heading"])
     try:
         runs = HistoryStore().list_recent(n=20)
@@ -678,68 +693,43 @@ def _render_run_history_sidebar() -> None:
         return
 
     st.sidebar.caption(T["history_count"].format(n=len(runs)))
-    for r in runs:
-        verdict = r.supervisor_verdict or {}
-        p0 = len(verdict.get("p0_blockers", []) or [])
-        p1 = len(verdict.get("p1_concerns", []) or [])
-        p2 = len(verdict.get("p2_suggestions", []) or [])
-        # Drop seconds from the timestamp — minute precision is plenty
-        # for "when did I run this", and shorter labels look cleaner.
-        title = T["history_run_title"].format(
+    labels = [
+        T["history_run_title"].format(
             ts=r.timestamp[:16].replace("T", " "),
             filename=r.prd_filename or T["history_run_filename_default"],
         )
-        with st.sidebar.expander(title, expanded=False):
-            st.caption(T["history_run_caption"].format(p0=p0, p1=p1, p2=p2))
-            if verdict.get("executive_summary"):
-                st.markdown(
-                    T["history_run_summary"].format(
-                        summary=verdict["executive_summary"]
-                    )
+        for r in runs
+    ]
+    selected_label = st.sidebar.selectbox(
+        T["history_select_label"], labels, key="history_selected_run"
+    )
+    r = runs[labels.index(selected_label)]
+    verdict = r.supervisor_verdict or {}
+    p0 = len(verdict.get("p0_blockers", []) or [])
+    p1 = len(verdict.get("p1_concerns", []) or [])
+    p2 = len(verdict.get("p2_suggestions", []) or [])
+    with st.sidebar.container(border=True):
+        st.caption(T["history_run_caption"].format(p0=p0, p1=p1, p2=p2))
+        if verdict.get("executive_summary"):
+            st.markdown(T["history_run_summary"].format(summary=verdict["executive_summary"]))
+        for sev_label, key in (("P0", "p0_blockers"), ("P1", "p1_concerns")):
+            items = verdict.get(key, []) or []
+            if items:
+                st.markdown(f"**{sev_label}**")
+                for item in items[:3]:
+                    st.markdown(f"- {item}")
+        show_more = st.toggle(T["history_more_details"], key=f"hist_more_{r.run_id}")
+        if show_more:
+            st.caption(
+                T["history_details_meta"].format(
+                    critiques=len(r.critiques), hits=len(r.skill_hits), misses=len(r.skill_misses)
                 )
-            # Show the P0 / P1 list inline — those are the "what went wrong"
-            # the user most likely came back for. P2 hides into the
-            # technical-details sub-expander.
-            for sev_label, key in (("P0", "p0_blockers"), ("P1", "p1_concerns")):
-                items = verdict.get(key, []) or []
-                if items:
-                    st.markdown(f"**{sev_label}**")
-                    for item in items:
-                        st.markdown(f"- {item}")
-
-            # Dev-tier details: P2 list, per-critique critic ownership +
-            # Skill attribution, and the critique/hits/misses count line.
-            # Streamlit forbids nested expanders, so we use a toggle here
-            # (same affordance, no DOM violation).
-            show_more = st.toggle(
-                T["history_more_details"],
-                key=f"hist_more_{r.run_id}",
-                value=False,
             )
-            if show_more:
-                st.caption(
-                    T["history_details_meta"].format(
-                        critiques=len(r.critiques),
-                        hits=len(r.skill_hits),
-                        misses=len(r.skill_misses),
-                    )
+            for c in r.critiques:
+                st.markdown(
+                    f"**{c.get('critic_id','?')}** [{c.get('severity','?')}] {c.get('finding','')}"
+                    + (f" · `{c['skill_id']}`" if c.get("skill_id") else "")
                 )
-                p2_items = verdict.get("p2_suggestions", []) or []
-                if p2_items:
-                    st.markdown("**P2**")
-                    for item in p2_items:
-                        st.markdown(f"- {item}")
-                if r.critiques:
-                    for c in r.critiques:
-                        st.markdown(
-                            f"**{c.get('critic_id','?')}** [{c.get('severity','?')}] "
-                            f"{c.get('finding','')}"
-                            + (
-                                f"  · 💡 `{c['skill_id']}`"
-                                if c.get("skill_id")
-                                else ""
-                            )
-                        )
 
 
 def _render_distillation_panel() -> None:
@@ -985,52 +975,34 @@ def _render_skill_library_sidebar() -> None:
     )
     st.sidebar.caption(T["skill_lib_caption"].format(n=len(skills)))
 
-    for s in skills:
-        name = s.get("name") or s.get("id")
-        usage = int(s.get("usage_count", 0) or 0)
-        with st.sidebar.expander(
-            T["skill_lib_expander_label"].format(name=name),
-            expanded=False,
-        ):
-            # Top of the expander stays plain-language: description + usage.
-            # The dev-tier metadata (version / created_by / injected_into /
-            # raw SKILL.md) tucks behind a toggle — Streamlit forbids
-            # nested expanders so we use st.toggle here.
-            st.write(s.get("description", ""))
-            st.caption(T["skill_lib_usage_inline"].format(usage=usage))
-
-            show_tech = st.toggle(
-                T["skill_lib_tech_details"],
-                key=f"skill_tech_{name}",
-                value=False,
-            )
-            if show_tech:
-                st.caption(
-                    T["skill_lib_tech_meta"].format(
-                        version=s.get("version", "1.0"),
-                        created_by=s.get("created_by", "?"),
-                        routes=", ".join(s.get("injected_into", [])) or "—",
-                    )
+    names = [s.get("name") or s.get("id") for s in skills]
+    selected_name = st.sidebar.selectbox(
+        T["skill_lib_select_label"], names, key="skill_library_selected"
+    )
+    selected = skills[names.index(selected_name)]
+    usage = int(selected.get("usage_count", 0) or 0)
+    with st.sidebar.container(border=True):
+        st.markdown(f"**{selected_name}**")
+        st.write(selected.get("description", ""))
+        st.caption(T["skill_lib_usage_inline"].format(usage=usage))
+        show_tech = st.toggle(T["skill_lib_tech_details"], key=f"skill_tech_{selected_name}")
+        if show_tech:
+            st.caption(
+                T["skill_lib_tech_meta"].format(
+                    version=selected.get("version", "1.0"),
+                    created_by=selected.get("created_by", "?"),
+                    routes=", ".join(selected.get("injected_into", [])) or "—",
                 )
-                if st.button(T["btn_show_skill_md"], key=f"skill_body_{name}"):
-                    st.session_state[f"skill_body_open_{name}"] = True
-                if st.session_state.get(f"skill_body_open_{name}"):
-                    try:
-                        raw = _skill_md_via_mcp_or_fallback(name, used_mcp)
-                        body = raw
-                        if raw.startswith("---"):
-                            parts = raw.split("---", 2)
-                            if len(parts) == 3:
-                                body = parts[2].lstrip("\n")
-                        st.markdown(body)
-                    except Exception as e:  # pragma: no cover
-                        st.caption(str(e))
-
-            # Curator-only actions: kept available but unobtrusive.
-            # Disabled until Day-13 curator-write tools land.
-            col_a, col_b = st.columns(2)
-            col_a.button(T["btn_skill_pin"], key=f"pin_{name}", disabled=True)
-            col_b.button(T["btn_skill_deprecate"], key=f"dep_{name}", disabled=True)
+            )
+            if st.button(T["btn_show_skill_md"], key=f"skill_body_{selected_name}"):
+                st.session_state[f"skill_body_open_{selected_name}"] = True
+            if st.session_state.get(f"skill_body_open_{selected_name}"):
+                try:
+                    raw = _skill_md_via_mcp_or_fallback(selected_name, used_mcp)
+                    body = raw.split("---", 2)[2].lstrip("\n") if raw.startswith("---") else raw
+                    st.markdown(body)
+                except Exception as e:  # pragma: no cover
+                    st.caption(str(e))
 
 
 def _render_ablation_tab() -> None:
@@ -1215,10 +1187,7 @@ def main() -> None:
     # first call after set_page_config.
     inject_global_css()
     st.title(T["title"])
-    # Subtitle replaces the compliance badge (per the Chinese-UI brief,
-    # the badge was redundant chrome). `st.html` because Streamlit's
-    # markdown sanitiser strips styled spans (since ~1.33).
-    st.html(compliance_badge_block_html(T["subtitle"]))
+    st.html(subtitle_block_html(T["subtitle"]))
 
     # Demo-deployment banner — only meaningful when rate limiting is on
     # (i.e. RATE_LIMIT_DISABLED unset). For local dev this surfaces the
@@ -1241,100 +1210,85 @@ def main() -> None:
 def _render_main_tab() -> None:
     golden = _load_golden_prds()
 
-    st.subheader(T["input_heading"])
-    # Stable explicit keys are mandatory: without them Streamlit identifies
-    # widgets by (type, label, script-position). The sidebar grows as
-    # proposals come in, which can shift this widget's position and reset
-    # the radio back to its default on every Run Distiller rerun.
-    source = st.radio(
-        T["prd_source_label"],
-        [
-            T["prd_source_paste"],
-            T["prd_source_golden"],
-            T["prd_source_upload"],
-        ],
-        horizontal=True,
-        key="prd_source_choice",
+    st.markdown(
+        review_composer_html(
+            T["composer_kicker"], T["composer_title"], T["composer_hint"]
+        ),
+        unsafe_allow_html=True,
     )
 
-    prd_text = ""
-    prd_filename: str | None = None
-    if source == T["prd_source_golden"] and golden:
-        choice = st.selectbox(
-            T["prd_golden_label"], list(golden.keys()), key="prd_golden_choice"
-        )
-        prd_text = golden[choice]
-        prd_filename = choice
-        st.expander(T["prd_preview"]).code(prd_text, language="markdown")
-    elif source == T["prd_source_upload"]:
-        # File uploader: accept PDF / Word (.docx) / Markdown / TXT.
-        # Streamlit keeps the UploadedFile in session_state across
-        # reruns automatically when we pin the widget key — handy
-        # because every interaction triggers a rerun.
-        uploaded = st.file_uploader(
-            T["prd_upload_label"],
-            type=["pdf", "docx", "md", "markdown", "txt"],
-            key="prd_upload_widget",
-            help=T["prd_upload_help"],
-        )
-        if uploaded is not None:
-            try:
-                prd_text = extract_prd_text(uploaded.name, uploaded.getvalue())
-                prd_filename = uploaded.name
-                st.success(
-                    T["prd_upload_success"].format(
-                        chars=len(prd_text), filename=uploaded.name
-                    )
-                )
-                with st.expander(T["prd_preview"], expanded=False):
-                    st.code(prd_text, language="markdown")
-            except (
-                UnsupportedFileType,
-                FileTooLargeError,
-                EmptyExtractionError,
-                PRDLoaderError,
-            ) as e:
-                # Show the localised exception message verbatim — these
-                # are already Chinese strings raised from prd_loader.py.
-                st.error(T["prd_upload_failed"].format(error=e))
-                prd_text = ""
-    else:
-        prd_text = st.text_area(
-            T["prd_paste_label"], height=300, key="prd_paste_text"
+    with st.container(border=True):
+        source = st.radio(
+            T["prd_source_label"],
+            [
+                T["prd_source_paste"],
+                T["prd_source_golden"],
+                T["prd_source_upload"],
+            ],
+            horizontal=True,
+            key="prd_source_choice",
         )
 
-    col_run, col_reset = st.columns([1, 1])
-    if col_run.button(T["btn_run_stress_test"], type="primary"):
-        if not prd_text.strip():
-            st.warning(T["warn_no_prd"])
-            return
-        # Rate-limit gate — debits both per-IP and global counters
-        # atomically. On exhaustion we show the i18n-localised limit
-        # message and refuse to invoke the pipeline (which is the only
-        # path that costs $ on the demo).
-        decision = rate_consume(detect_ip())
-        if not decision.allowed:
-            if decision.reason == "global":
-                st.error(
-                    T["rate_limit_global_exhausted"].format(
-                        per_day=RATE_GLOBAL_PER_DAY
+        prd_text = ""
+        prd_filename: str | None = None
+        if source == T["prd_source_golden"] and golden:
+            choice = st.selectbox(
+                T["prd_golden_label"], list(golden.keys()), key="prd_golden_choice"
+            )
+            prd_text = golden[choice]
+            prd_filename = choice
+            with st.expander(T["prd_preview"]):
+                st.code(prd_text, language="markdown")
+        elif source == T["prd_source_upload"]:
+            uploaded = st.file_uploader(
+                T["prd_upload_label"],
+                type=["pdf", "docx", "md", "markdown", "txt"],
+                key="prd_upload_widget",
+                help=T["prd_upload_help"],
+            )
+            if uploaded is not None:
+                try:
+                    prd_text = extract_prd_text(uploaded.name, uploaded.getvalue())
+                    prd_filename = uploaded.name
+                    st.success(
+                        T["prd_upload_success"].format(
+                            chars=len(prd_text), filename=uploaded.name
+                        )
                     )
-                )
-            else:
-                st.error(
-                    T["rate_limit_ip_exhausted"].format(
-                        per_hour=RATE_PER_IP_PER_HOUR
-                    )
-                )
-            return
-        # Clear any stale dialogs from a previous run before caching the new one.
-        st.session_state["active_dialogs"] = {}
-        _run_and_cache(prd_text, prd_filename=prd_filename)
+                    with st.expander(T["prd_preview"], expanded=False):
+                        st.code(prd_text, language="markdown")
+                except (
+                    UnsupportedFileType,
+                    FileTooLargeError,
+                    EmptyExtractionError,
+                    PRDLoaderError,
+                ) as e:
+                    st.error(T["prd_upload_failed"].format(error=e))
+                    prd_text = ""
+        else:
+            prd_text = st.text_area(
+                T["prd_paste_label"], height=280, key="prd_paste_text"
+            )
 
-    if col_reset.button(T["btn_reset"]):
-        for k in ("run", "active_dialogs", "prd_text", "dialog_llm"):
-            st.session_state.pop(k, None)
-        st.rerun()
+        col_run, col_reset, _spacer = st.columns([1.4, 0.8, 4.8])
+        if col_run.button(T["btn_run_stress_test"], type="primary", use_container_width=True):
+            if not prd_text.strip():
+                st.warning(T["warn_no_prd"])
+                return
+            decision = rate_consume(detect_ip())
+            if not decision.allowed:
+                if decision.reason == "global":
+                    st.error(T["rate_limit_global_exhausted"].format(per_day=RATE_GLOBAL_PER_DAY))
+                else:
+                    st.error(T["rate_limit_ip_exhausted"].format(per_hour=RATE_PER_IP_PER_HOUR))
+                return
+            st.session_state["active_dialogs"] = {}
+            _run_and_cache(prd_text, prd_filename=prd_filename)
+
+        if col_reset.button(T["btn_reset"], use_container_width=True):
+            for k in ("run", "active_dialogs", "prd_text", "dialog_llm"):
+                st.session_state.pop(k, None)
+            st.rerun()
 
     run = st.session_state.get("run")
     if run:

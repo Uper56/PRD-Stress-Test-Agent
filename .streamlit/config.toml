@@ -1,8 +1,8 @@
 # Streamlit base theme. Mirrors the OKLCH palette in src/ui/styles.py:
 #   primary    = oklch(0.55 0.25 250) → blue-violet (Modern tech preset)
-#   bg         = oklch(0.18 0.02 250)
-#   surface    = oklch(0.22 0.02 250)
-#   text       = oklch(0.96 0.01 250)
+#   canvas     = oklch(0.975 0.008 250)
+#   surface    = oklch(1 0 0)
+#   text       = oklch(0.24 0.025 250)
 #
 # Streamlit's TOML theme accepts only hex; the values below are
 # perceptually-uniform OKLCH conversions (computed once, pinned).
@@ -10,11 +10,11 @@
 # src/ui/styles.py:inject_global_css() so we can use oklch() directly
 # and color-mix() for tints.
 [theme]
-base = "dark"
-primaryColor = "#6F61F2"             # oklch(0.55 0.25 250)
-backgroundColor = "#262833"          # oklch(0.18 0.02 250)
-secondaryBackgroundColor = "#2D303C" # oklch(0.22 0.02 250)
-textColor = "#F1F2F6"                # oklch(0.96 0.01 250)
+base = "light"
+primaryColor = "#655BE8"             # oklch(0.55 0.25 250)
+backgroundColor = "#F7F8FB"          # oklch(0.975 0.008 250)
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#29303D"                # oklch(0.24 0.025 250)
 font = "sans serif"
 
 [browser]
