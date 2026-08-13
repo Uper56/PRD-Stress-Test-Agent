@@ -1,8 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import { Composer, type ComposerPayload } from '../components/Composer';
 import { CritiqueCard, type FeedbackState } from '../components/CritiqueCard';
 import { HistoryRail } from '../components/HistoryRail';
-import { PixelProgress } from '../components/PixelProgress';
+import { RunSequence } from '../components/RunSequence';
 import { ThinkingTerminal } from '../components/ThinkingTerminal';
 import { VerdictPanel } from '../components/VerdictPanel';
 import { api, ApiError } from '../lib/api';
@@ -25,6 +25,11 @@ const STAGE_LABELS: Record<number, string> = {
   5: '完成',
 };
 
+/** Append a battle-log line, collapsing immediate duplicates. */
+function pushLog(setLog: Dispatch<SetStateAction<string[]>>, line: string) {
+  setLog((prev) => (prev[prev.length - 1] === line ? prev : [...prev, line]));
+}
+
 /** The review workspace — composer in, streamed verdict out. */
 export function ReviewPage() {
   const [runId, setRunId] = useState<string | null>(null);
@@ -41,6 +46,7 @@ export function ReviewPage() {
   const [quotaError, setQuotaError] = useState<string | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [feedback, setFeedback] = useState<Record<string, FeedbackState>>({});
+  const [log, setLog] = useState<string[]>([]);
   const [historyDetail, setHistoryDetail] = useState<HistoryDetail | null>(null);
   const [historyTick, setHistoryTick] = useState(0);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -59,6 +65,7 @@ export function ReviewPage() {
     setCritiques([]);
     setChallenges([]);
     setFeedback({});
+    setLog([]);
     try {
       const res = await api.startReview(payload.prdText, payload.prdFilename);
       setRunId(res.run_id);
@@ -84,36 +91,57 @@ export function ReviewPage() {
       switch (ev.event) {
         case 'phase': {
           const name = String(ev.data.name ?? '');
-          if (name === 'graph') setStage(1);
-          if (name === 'supervisor') setStage(4);
+          if (name === 'graph') {
+            setStage(1);
+            pushLog(setLog, 'INTAKE 已启动 · 解析 PRD 全文');
+            pushLog(setLog, '4 位 CRITIC 进入评审擂台');
+          }
+          if (name === 'supervisor') {
+            setStage(4);
+            pushLog(setLog, 'SUPERVISOR 开始推理…');
+          }
           break;
         }
-        case 'critiques':
-          setCritiques((ev.data.critiques as Critique[]) ?? []);
+        case 'critiques': {
+          const list = (ev.data.critiques as Critique[]) ?? [];
+          setCritiques(list);
           setStage(2);
+          pushLog(setLog, `CRITIC 集结完毕 · 共 ${list.length} 条 finding`);
           break;
-        case 'challenges':
-          setChallenges((ev.data.challenges as Challenge[]) ?? []);
+        }
+        case 'challenges': {
+          const list = (ev.data.challenges as Challenge[]) ?? [];
+          setChallenges(list);
           setRounds(Number(ev.data.rounds ?? 0));
           setConverged(Boolean(ev.data.converged));
           setStage(3);
+          pushLog(
+            setLog,
+            ev.data.converged
+              ? `互辩 ROUND ${ev.data.rounds} · 收敛 ✓`
+              : `互辩 ROUND ${ev.data.rounds} · 达到最大轮数`,
+          );
           break;
+        }
         case 'thinking':
           setThinkingText((t) => t + String(ev.data.delta ?? ''));
           break;
         case 'verdict':
           setVerdict((ev.data.verdict as Verdict) ?? null);
+          pushLog(setLog, '裁决已生成 · 写入档案…');
           break;
         case 'done':
           setVerdict((ev.data.verdict as Verdict) ?? null);
           setStage(5);
           setRunning(false);
           setThinkingDone(true);
+          pushLog(setLog, 'RUN 存档完成');
           setHistoryTick((t) => t + 1);
           break;
         case 'error': {
           const message = String(ev.data.message ?? '评审失败');
           if (message.includes('历史记录保存失败')) break; // non-fatal
+          pushLog(setLog, `⚠ ${message}`);
           setQuotaError(message);
           setRunning(false);
           setStage(0);
@@ -191,15 +219,17 @@ export function ReviewPage() {
         <Composer onRun={(p) => void handleRun(p)} quotaError={quotaError} running={running} />
 
         {running && (
-          <div className={styles.progressZone}>
-            <PixelProgress
-              total={5}
-              filled={Math.max(stage, 1)}
-              label={STAGE_LABELS[Math.max(stage, 1)]}
-              active
-            />
-            <ThinkingTerminal text={thinkingText} inProgress={!thinkingDone} />
-          </div>
+          <RunSequence
+            runId={runId ?? '…'}
+            stage={stage}
+            stageLabel={STAGE_LABELS[Math.max(stage, 1)]}
+            critiques={critiques}
+            rounds={rounds}
+            converged={converged}
+            log={log}
+            thinkingText={thinkingText}
+            thinkingDone={thinkingDone}
+          />
         )}
 
         {resultsReady && (

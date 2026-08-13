@@ -1,0 +1,236 @@
+.deck {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: var(--px-border-w-strong) solid var(--px-border-strong);
+  background: var(--px-panel);
+  box-shadow: var(--px-shadow);
+  padding: 14px;
+  animation: rise 0.2s steps(3);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.topline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.runId {
+  font-size: 0.72rem;
+  color: var(--px-primary);
+}
+
+.arena {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: var(--px-border-w) solid var(--px-border);
+  background: var(--px-canvas);
+  padding: 8px 10px;
+}
+
+.squad {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.supervisorRow {
+  border-top: var(--px-border-w) dashed var(--px-border);
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.agentRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 22px;
+}
+
+.spriteWrap {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.sprite {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 2px;
+}
+
+/* scanning: bob the sprite and pulse the row */
+.active .sprite {
+  animation: bob 0.5s steps(2) infinite;
+}
+
+.active {
+  background: color-mix(in srgb, var(--px-primary) 7%, transparent);
+}
+
+@keyframes bob {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+.done {
+  opacity: 1;
+}
+
+.doneState {
+  font-family: var(--px-display);
+  font-size: 0.7rem;
+  color: var(--px-success);
+}
+
+.agentName {
+  font-family: var(--px-display);
+  font-size: 0.78rem;
+  color: var(--px-text);
+  min-width: 118px;
+}
+
+.agentState {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.74rem;
+  color: var(--px-muted);
+}
+
+.scanGlyph {
+  color: var(--px-primary);
+  animation: scanspin 0.8s steps(4) infinite;
+  font-size: 0.8rem;
+}
+
+@keyframes scanspin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.scanText {
+  animation: flicker 2.4s steps(6) infinite;
+}
+
+@keyframes flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 0.55;
+  }
+  60% {
+    opacity: 0.85;
+  }
+}
+
+.idleState {
+  opacity: 0.45;
+}
+
+/* ---- battle log ---- */
+
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 20px;
+}
+
+.logLine {
+  font-size: 0.74rem;
+  color: var(--px-muted);
+  display: flex;
+  gap: 8px;
+  animation: typein 0.24s steps(4);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@keyframes typein {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.logPrompt {
+  color: var(--px-primary);
+  flex-shrink: 0;
+}
+
+.logLast {
+  color: var(--px-text);
+}
+
+/* ---- supervisor window ---- */
+
+.supervisorWin {
+  border: var(--px-border-w-strong) solid var(--px-border-strong);
+  box-shadow: var(--px-shadow-sm);
+}
+
+.winBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--px-panel-raised);
+  border-bottom: var(--px-border-w) solid var(--px-border);
+  padding: 4px 8px;
+}
+
+.winTitle {
+  font-family: var(--px-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--px-primary);
+}
+
+.winBtns {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.winBtns i {
+  font-style: normal;
+  font-family: var(--px-mono);
+  font-size: 0.66rem;
+  color: var(--px-muted);
+  border: var(--px-border-w) solid var(--px-border);
+  padding: 0 4px;
+  line-height: 1.3;
+}
+
+@media (max-width: 720px) {
+  .agentName {
+    min-width: 96px;
+  }
+}
