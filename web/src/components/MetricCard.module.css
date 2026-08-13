@@ -1,0 +1,31 @@
+.body {
+  padding: 12px 14px;
+}
+
+.label {
+  margin-bottom: 4px;
+}
+
+.value {
+  font-family: var(--px-display);
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--px-text);
+  line-height: 1.2;
+}
+
+.delta {
+  margin-top: 4px;
+  font-size: 0.74rem;
+  font-family: var(--px-mono);
+}
+
+.up {
+  color: var(--px-success);
+}
+.down {
+  color: var(--px-danger);
+}
+.neutral {
+  color: var(--px-muted);
+}

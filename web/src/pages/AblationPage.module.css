@@ -1,0 +1,179 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.intro {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--px-muted);
+  max-width: 720px;
+}
+
+.error {
+  font-size: 0.82rem;
+  color: var(--px-danger);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: var(--px-border-w) solid var(--px-border);
+  border-radius: var(--px-radius);
+  box-shadow: var(--px-shadow-sm);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  background: var(--px-panel);
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: var(--px-border-w) solid var(--px-border);
+}
+
+.table th {
+  font-family: var(--px-display);
+  font-size: 0.76rem;
+  letter-spacing: 0.03em;
+  color: var(--px-primary);
+  background: var(--px-panel-raised);
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: var(--px-panel-raised);
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.chart {
+  border: var(--px-border-w) solid var(--px-border);
+  background: var(--px-panel);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: var(--px-radius);
+}
+
+.chartLabel {
+  margin-bottom: 2px;
+}
+
+.chartRow {
+  display: grid;
+  grid-template-columns: 110px 1fr 64px;
+  gap: 8px;
+  align-items: center;
+}
+
+.chartName {
+  font-size: 0.76rem;
+  color: var(--px-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chartTrack {
+  height: 14px;
+  background: var(--px-canvas);
+  border: var(--px-border-w) solid var(--px-border);
+}
+
+.chartBar {
+  height: 100%;
+  background: var(--px-border-strong);
+  transition: width 0.3s var(--px-step);
+}
+
+.chartBarOn {
+  background: var(--px-primary);
+}
+
+.chartVal {
+  font-size: 0.74rem;
+  text-align: right;
+  color: var(--px-text);
+}
+
+.meta {
+  font-size: 0.76rem;
+  color: var(--px-muted);
+}
+
+.rerun {
+  border-top: var(--px-border-w-strong) solid var(--px-border);
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rerunBar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.quickLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  color: var(--px-text);
+  cursor: pointer;
+}
+
+.quickLabel input {
+  accent-color: var(--px-primary);
+  width: 15px;
+  height: 15px;
+}
+
+.disclaimer {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--px-muted);
+}
+
+@media (max-width: 860px) {
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .charts {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,78 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--px-display);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--px-text);
+  background: var(--px-panel-raised);
+  border: var(--px-border-w-strong) solid var(--px-border-strong);
+  border-radius: var(--px-radius);
+  box-shadow: var(--px-shadow-sm);
+  cursor: pointer;
+  user-select: none;
+  transition: transform var(--px-time-fast) var(--px-step), box-shadow var(--px-time-fast) var(--px-step),
+    background-color var(--px-time-fast) var(--px-step);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--px-border-strong);
+}
+
+.btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 #000;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--px-primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
+/* ---- variants ---- */
+
+.primary {
+  background: var(--px-primary);
+  border-color: var(--px-primary);
+  color: var(--px-on-primary);
+}
+.primary:hover:not(:disabled) {
+  background: var(--px-primary-hover);
+  border-color: var(--px-primary-hover);
+}
+
+.danger {
+  border-color: var(--px-danger);
+  color: var(--px-danger);
+}
+.danger:hover:not(:disabled) {
+  background: var(--px-danger);
+  color: #0d0d0f;
+}
+
+.success {
+  border-color: var(--px-success);
+  color: var(--px-success);
+}
+.success:hover:not(:disabled) {
+  background: var(--px-success);
+  color: #0d0d0f;
+}
+
+/* ---- sizes ---- */
+
+.sm {
+  font-size: 0.68rem;
+  padding: 3px 8px 5px;
+}
+.md {
+  font-size: 0.8rem;
+  padding: 7px 14px 9px;
+}

@@ -1,0 +1,32 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.glyph {
+  font-family: var(--px-display);
+  font-size: 2rem;
+  color: var(--px-border-strong);
+  line-height: 1;
+  user-select: none;
+}
+
+.title {
+  font-family: var(--px-display);
+  font-size: 0.95rem;
+  color: var(--px-text);
+}
+
+.hint {
+  font-size: 0.82rem;
+  color: var(--px-muted);
+  max-width: 420px;
+}
+
+.action {
+  margin-top: 6px;
+}

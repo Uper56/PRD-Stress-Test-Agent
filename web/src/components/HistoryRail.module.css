@@ -1,0 +1,99 @@
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.head {
+  padding: 0 2px;
+}
+
+.empty,
+.emptyHint {
+  color: var(--px-muted);
+  font-size: 0.78rem;
+}
+
+.emptyHint {
+  opacity: 0.7;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+}
+
+.item {
+  width: 100%;
+  text-align: left;
+  background: var(--px-panel);
+  border: var(--px-border-w) solid var(--px-border);
+  color: var(--px-text);
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: var(--px-radius);
+  transition: border-color var(--px-time-fast) var(--px-step), transform var(--px-time-fast) var(--px-step);
+}
+
+.item:hover {
+  border-color: var(--px-border-strong);
+  transform: translateX(2px);
+}
+
+.itemActive {
+  border-color: var(--px-primary);
+  box-shadow: var(--px-shadow-sm);
+}
+
+.itemTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ts {
+  font-family: var(--px-mono);
+  font-size: 0.68rem;
+  color: var(--px-muted);
+}
+
+.counts {
+  display: inline-flex;
+  gap: 5px;
+  font-family: var(--px-display);
+  font-size: 0.62rem;
+}
+
+.counts em {
+  font-style: normal;
+}
+
+.p0 {
+  color: var(--px-p0);
+}
+.p1 {
+  color: var(--px-p1);
+}
+.p2 {
+  color: var(--px-p2);
+}
+.none {
+  color: var(--px-muted);
+  opacity: 0.7;
+}
+
+.name {
+  margin-top: 3px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

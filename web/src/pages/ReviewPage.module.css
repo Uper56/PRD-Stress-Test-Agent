@@ -1,0 +1,230 @@
+.layout {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  gap: 22px;
+  align-items: start;
+}
+
+.side {
+  position: sticky;
+  top: 76px;
+}
+
+.workspace {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ---- hero ---- */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kicker {
+  font-family: var(--px-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--px-primary);
+}
+
+.heroTitle {
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+.heroHint {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--px-muted);
+}
+
+/* ---- banners ---- */
+
+.banner,
+.bannerErr {
+  font-size: 0.82rem;
+  padding: 8px 12px;
+  border: var(--px-border-w) solid var(--px-border);
+  background: var(--px-panel);
+}
+
+.banner {
+  color: var(--px-p1);
+}
+
+.bannerErr {
+  color: var(--px-danger);
+  border-color: color-mix(in srgb, var(--px-danger) 50%, var(--px-border));
+}
+
+/* ---- progress zone ---- */
+
+.progressZone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- results ---- */
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: rise 0.2s steps(3);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.thinkingWrap,
+.crossWrap {
+  border: var(--px-border-w) solid var(--px-border);
+  background: var(--px-panel);
+  padding: 10px 12px;
+  border-radius: var(--px-radius);
+  box-shadow: var(--px-shadow-sm);
+}
+
+.thinkingSummary,
+.crossSummary {
+  cursor: pointer;
+  font-family: var(--px-display);
+  font-size: 0.82rem;
+  color: var(--px-muted);
+  user-select: none;
+}
+
+.thinkingWrap details,
+.crossWrap details {
+  margin-top: 8px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sectionCount {
+  font-family: var(--px-mono);
+  font-size: 0.75rem;
+  color: var(--px-muted);
+}
+
+/* ---- critic tabs ---- */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  border-bottom: var(--px-border-w-strong) solid var(--px-border);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--px-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  color: var(--px-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 5px 8px 7px;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--px-text);
+}
+
+.tabActive {
+  color: var(--px-primary);
+  border-bottom-color: var(--px-primary);
+}
+
+.tabCount {
+  font-style: normal;
+  font-family: var(--px-mono);
+  font-size: 0.66rem;
+  background: var(--px-panel-raised);
+  border: var(--px-border-w) solid var(--px-border);
+  padding: 0 5px;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.noFindings {
+  font-size: 0.84rem;
+  color: var(--px-muted);
+  padding: 14px;
+  border: var(--px-border-w) dashed var(--px-border);
+  text-align: center;
+}
+
+/* ---- cross challenge ---- */
+
+.crossBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.crossOk {
+  font-size: 0.82rem;
+  color: var(--px-success);
+}
+
+.crossWarn {
+  font-size: 0.82rem;
+  color: var(--px-p1);
+}
+
+.crossRoundHead {
+  margin-bottom: 6px;
+}
+
+.crossItem {
+  border-left: 3px solid var(--px-border-strong);
+  padding: 4px 0 4px 10px;
+  margin-bottom: 8px;
+  font-size: 0.76rem;
+}
+
+.crossCounter {
+  margin-top: 3px;
+  color: var(--px-muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .side {
+    position: static;
+  }
+}

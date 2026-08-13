@@ -1,0 +1,79 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 10px 20px;
+  background: var(--px-panel);
+  border-bottom: var(--px-border-w-strong) solid var(--px-border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.logo {
+  font-family: var(--px-display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.05em;
+  color: var(--px-primary);
+  white-space: nowrap;
+}
+
+.logoMark {
+  margin-right: 6px;
+  opacity: 0.75;
+}
+
+.nav {
+  display: flex;
+  gap: 14px;
+  flex: 1;
+}
+
+.tab {
+  font-family: var(--px-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  color: var(--px-muted);
+  padding: 3px 2px 5px;
+  border-bottom: 2px solid transparent;
+}
+
+.tab:hover {
+  color: var(--px-text);
+}
+
+.tabActive {
+  color: var(--px-primary);
+  border-bottom-color: var(--px-primary);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-family: var(--px-mono);
+  color: var(--px-muted);
+  border: var(--px-border-w) solid var(--px-border);
+  background: var(--px-canvas);
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  background: var(--px-success);
+  display: inline-block;
+}
+
+@media (max-width: 720px) {
+  .bar {
+    gap: 12px;
+    padding: 10px 12px;
+  }
+  .status {
+    display: none;
+  }
+}

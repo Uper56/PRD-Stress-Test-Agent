@@ -1,0 +1,91 @@
+.card {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.score {
+  font-size: 0.8rem;
+}
+
+.name {
+  font-family: var(--px-display);
+  font-size: 0.95rem;
+  color: var(--px-text);
+}
+
+.gen {
+  font-family: var(--px-mono);
+  font-size: 0.68rem;
+  color: var(--px-muted);
+}
+
+.caption {
+  font-size: 0.78rem;
+  color: var(--px-muted);
+}
+
+.progressBar {
+  height: 12px;
+  border: var(--px-border-w) solid var(--px-border);
+  background: var(--px-canvas);
+  border-radius: var(--px-radius);
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--px-primary);
+  transition: width 0.2s var(--px-step);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.evidence {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.78rem;
+  color: var(--px-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editor {
+  width: 100%;
+  background: var(--px-canvas);
+  border: var(--px-border-w) solid var(--px-border);
+  color: var(--px-text);
+  padding: 8px 10px;
+  font-family: var(--px-mono);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  border-radius: var(--px-radius);
+  resize: vertical;
+}
+
+.editor:focus {
+  outline: none;
+  border-color: var(--px-primary);
+}
+
+.buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.error {
+  font-size: 0.78rem;
+  color: var(--px-danger);
+}

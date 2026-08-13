@@ -1,0 +1,96 @@
+/* Global base — Codex-quiet canvas with a faint pixel dot-grid texture. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--px-body);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--px-text);
+  background-color: var(--px-canvas);
+  /* faint dot grid — the only canvas texture at standard density */
+  background-image: radial-gradient(var(--px-border) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--px-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin: 0;
+  color: var(--px-text);
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+h2 {
+  font-size: 1.15rem;
+}
+h3 {
+  font-size: 1rem;
+}
+
+a {
+  color: var(--px-primary);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--px-primary-hover);
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+code,
+pre {
+  font-family: var(--px-mono);
+}
+
+pre {
+  background: var(--px-panel);
+  border: var(--px-border-w) solid var(--px-border);
+  padding: 10px 12px;
+  border-radius: var(--px-radius);
+  overflow-x: auto;
+  font-size: 0.85rem;
+}
+
+::selection {
+  background: var(--px-primary);
+  color: var(--px-on-primary);
+}
+
+/* scrollbars — chunky, square, on-canvas */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: var(--px-canvas);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--px-border-strong);
+  border: 3px solid var(--px-canvas);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--px-primary);
+}

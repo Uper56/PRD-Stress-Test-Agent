@@ -1,0 +1,38 @@
+/* Self-hosted fonts — no external CDN (Google Fonts is blocked in CN).
+
+   Stack strategy for the Chinese-first UI:
+   - Latin characters render in the pixel display font (Pixelify Sans).
+   - CJK characters fall through to Zpix (最像素) — a Chinese pixel font.
+   - Body text stays Inter + system CJK for reading comfort.
+*/
+
+/* Inter — variable, latin subset (400/600/700 used) */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Pixelify Sans — variable, latin subset (400/600 used) */
+@font-face {
+  font-family: 'Pixelify Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/pixelify-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Zpix — Chinese pixel font (website subset: common CJK + ASCII + punctuation) */
+@font-face {
+  font-family: 'Zpix';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/zpix.woff2') format('woff2');
+}

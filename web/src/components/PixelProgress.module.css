@@ -1,0 +1,39 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.blocks {
+  display: flex;
+  gap: 4px;
+}
+
+.block {
+  width: 14px;
+  height: 14px;
+  border: var(--px-border-w) solid var(--px-border-strong);
+  background: var(--px-panel);
+  border-radius: var(--px-radius);
+}
+
+.on {
+  background: var(--px-primary);
+  border-color: var(--px-primary);
+}
+
+.current {
+  animation: pulse 0.6s steps(2) infinite;
+}
+
+@keyframes pulse {
+  50% {
+    background: var(--px-panel);
+    border-color: var(--px-border-strong);
+  }
+}
+
+.label {
+  color: var(--px-muted);
+  font-size: 0.72rem;
+}

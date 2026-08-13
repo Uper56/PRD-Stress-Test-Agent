@@ -1,0 +1,111 @@
+/* ============================================================
+   PIXEL·PRD design tokens — "像素工作室" direction
+   Magenta primary × standard pixel density (see design spec §4)
+
+   Shape language: zero radius, hard 1.5–2px borders, hard offset
+   shadows (no blur). Motion is stepped — the button "key travel".
+   ============================================================ */
+
+:root {
+  /* ---- palette ---- */
+  --px-primary: #ff5fc8;
+  --px-primary-hover: #ff7fd4;
+  --px-primary-soft: rgba(255, 95, 200, 0.12);
+  --px-canvas: #0d0d0f;
+  --px-panel: #16161a;
+  --px-panel-raised: #1c1c21;
+  --px-border: #2e2e34;
+  --px-border-strong: #3a3a42;
+  --px-text: #e8e8ea;
+  --px-muted: #9b9ba3;
+  --px-on-primary: #0d0d0f;
+
+  /* ---- semantic (severity is data, never brand) ---- */
+  --px-p0: #ff6b5e;
+  --px-p1: #ffc94d;
+  --px-p2: #6ea8ff;
+  --px-success: #8bff5f;
+  --px-danger: #ff6b5e;
+
+  /* ---- fonts ---- */
+  --px-display: 'Pixelify Sans', 'Zpix', 'Inter', sans-serif;
+  --px-body: 'Inter', 'PingFang SC', 'Microsoft YaHei', ui-sans-serif, system-ui, sans-serif;
+  --px-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Courier New', monospace;
+
+  /* ---- shape ---- */
+  --px-radius: 0;
+  --px-border-w: 1.5px;
+  --px-border-w-strong: 2px;
+  --px-shadow: 3px 3px 0 #000;
+  --px-shadow-sm: 2px 2px 0 #000;
+  --px-shadow-lg: 5px 5px 0 #000;
+
+  /* ---- motion (stepped — pixel frames, not easing curves) ---- */
+  --px-step: steps(2, end);
+  --px-time-fast: 90ms;
+  --px-time-med: 160ms;
+}
+
+/* ---- shared primitives (global — components build on these) ---- */
+
+.px-card {
+  background: var(--px-panel);
+  border: var(--px-border-w) solid var(--px-border);
+  box-shadow: var(--px-shadow);
+  border-radius: var(--px-radius);
+}
+
+.px-card--accent {
+  border-color: var(--px-primary);
+}
+
+.px-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--px-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  padding: 2px 7px 4px;
+  border: var(--px-border-w) solid var(--px-border-strong);
+  background: var(--px-panel-raised);
+  color: var(--px-muted);
+  border-radius: var(--px-radius);
+}
+
+.px-label {
+  font-family: var(--px-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--px-muted);
+  text-transform: uppercase;
+}
+
+.px-mono {
+  font-family: var(--px-mono);
+}
+
+.px-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 0.95em;
+  background: var(--px-primary);
+  vertical-align: -0.12em;
+  margin-left: 2px;
+  animation: px-blink 1s steps(1) infinite;
+}
+
+@keyframes px-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
