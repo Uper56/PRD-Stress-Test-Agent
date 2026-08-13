@@ -36,7 +36,9 @@
   justify-content: center;
   gap: 2px;
   pointer-events: none;
-  animation: stampIn 0.32s steps(4);
+  animation:
+    stampIn 0.32s steps(4) both,
+    bannerOut 0.24s steps(2) 1.16s forwards;
 }
 
 @keyframes stampIn {
@@ -48,6 +50,30 @@
     transform: scale(1);
     opacity: 1;
   }
+}
+
+@keyframes bannerOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---- 查看结果 bar ---- */
+
+.viewBar {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+  border-top: var(--px-border-w) dashed var(--px-border);
+  animation: rise 0.2s steps(3);
+}
+
+.viewBar button {
+  min-width: 220px;
+  font-size: 0.9rem;
 }
 
 .trophyWrap {

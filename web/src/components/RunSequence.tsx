@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { Critique } from '../lib/types';
+import { PixelButton } from './PixelButton';
 import { PixelProgress } from './PixelProgress';
 import { ThinkingTerminal } from './ThinkingTerminal';
 import styles from './RunSequence.module.css';
@@ -110,6 +111,8 @@ interface Props {
   log: string[];
   thinkingText: string;
   thinkingDone: boolean;
+  /** Called when the user clicks「查看结果」after the CLEAR! beat */
+  onViewResults: () => void;
 }
 
 const SCAN_LINES = [
@@ -146,12 +149,15 @@ export function RunSequence({
   log,
   thinkingText,
   thinkingDone,
+  onViewResults,
 }: Props) {
   const [scanLineIdx, setScanLineIdx] = useState(0);
   // Display stage lags the real stage by BLOCK_STEP_MS per block — events
   // burst (critiques → challenges → supervisor within ~1s), but the bar
   // should still fill progressively.
   const [displayStage, setDisplayStage] = useState(0);
+  // The「查看结果」button appears only after the CLEAR! beat has played out.
+  const [showViewButton, setShowViewButton] = useState(false);
 
   useEffect(() => {
     if (stage <= displayStage) {
@@ -164,6 +170,15 @@ export function RunSequence({
     );
     return () => clearTimeout(timer);
   }, [stage, displayStage]);
+
+  useEffect(() => {
+    if (displayStage < 5) {
+      setShowViewButton(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowViewButton(true), 1400);
+    return () => clearTimeout(timer);
+  }, [displayStage]);
 
   // While the graph phase runs (display stage 1), cycle decorative scan
   // lines so the 30s LLM stretch stays alive — these describe the pipeline
@@ -328,6 +343,14 @@ export function RunSequence({
             inProgress={!thinkingDone}
             label={converged ? `推理 · 第 ${rounds} 轮收敛` : '推理'}
           />
+        </div>
+      )}
+
+      {cleared && showViewButton && (
+        <div className={styles.viewBar}>
+          <PixelButton variant="primary" onClick={onViewResults}>
+            查看结果 ▼
+          </PixelButton>
         </div>
       )}
     </div>

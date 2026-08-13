@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, type Dispatch, type SetStateAction } fro
 import { Composer, type ComposerPayload } from '../components/Composer';
 import { CritiqueCard, type FeedbackState } from '../components/CritiqueCard';
 import { HistoryRail } from '../components/HistoryRail';
+import { PixelButton } from '../components/PixelButton';
 import { RunSequence } from '../components/RunSequence';
 import { ThinkingTerminal } from '../components/ThinkingTerminal';
 import { VerdictPanel } from '../components/VerdictPanel';
@@ -45,6 +46,7 @@ export function ReviewPage() {
   const [liveCriticTab, setLiveCriticTab] = useState(0);
   // Guards the "done" handling against SSE replay (reconnect re-emits events).
   const doneRef = useRef(false);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   const handleRun = useCallback(async (payload: ComposerPayload) => {
     setQuotaError(null);
@@ -133,8 +135,8 @@ export function ReviewPage() {
           setThinkingDone(true);
           pushLog(setLog, 'RUN 存档完成');
           setHistoryTick((t) => t + 1);
-          // Let the CLEAR! beat (trophy + flash) play before results take over.
-          window.setTimeout(() => setRunning(false), 1500);
+          // The deck stays up until the user clicks「查看结果」— the CLEAR!
+          // beat gets its full moment, then the button appears in the deck.
           break;
         }
         case 'error': {
@@ -165,6 +167,28 @@ export function ReviewPage() {
     } catch {
       setHistoryError('无法加载这份历史评审');
     }
+  }, []);
+
+  const handleViewResults = useCallback(() => {
+    setRunning(false);
+    // Let the results mount, then bring them into view.
+    requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
+
+  const handleClearResults = useCallback(() => {
+    setRunning(false);
+    setStage(0);
+    setThinkingText('');
+    setThinkingDone(false);
+    setVerdict(null);
+    setCritiques([]);
+    setChallenges([]);
+    setLog([]);
+    setFeedback({});
+    setHistoryDetail(null);
+    setHistoryError(null);
   }, []);
 
   const handleFeedback = useCallback(
@@ -227,24 +251,33 @@ export function ReviewPage() {
             log={log}
             thinkingText={thinkingText}
             thinkingDone={thinkingDone}
+            onViewResults={handleViewResults}
           />
         )}
 
         {resultsReady && (
-          <RunResultsView
-            critiques={activeCritiques}
-            challenges={activeChallenges}
-            rounds={activeRounds}
-            converged={activeConverged}
-            verdict={activeVerdict}
-            thinkingText={historyDetail ? '' : thinkingText}
-            discussUrl={discussUrl}
-            feedback={feedback}
-            onFeedback={handleFeedback}
-            liveCriticTab={liveCriticTab}
-            setLiveCriticTab={setLiveCriticTab}
-            historyCritiqueKey={historyCritiqueKey}
-          />
+          <div ref={resultsRef} className={styles.resultsBlock}>
+            <div className={styles.resultsToolbar}>
+              <span className={`px-label ${styles.resultsToolbarLabel}`}>评审结果</span>
+              <PixelButton size="sm" onClick={handleClearResults}>
+                ✕ 清空
+              </PixelButton>
+            </div>
+            <RunResultsView
+              critiques={activeCritiques}
+              challenges={activeChallenges}
+              rounds={activeRounds}
+              converged={activeConverged}
+              verdict={activeVerdict}
+              thinkingText={historyDetail ? '' : thinkingText}
+              discussUrl={discussUrl}
+              feedback={feedback}
+              onFeedback={handleFeedback}
+              liveCriticTab={liveCriticTab}
+              setLiveCriticTab={setLiveCriticTab}
+              historyCritiqueKey={historyCritiqueKey}
+            />
+          </div>
         )}
       </div>
     </div>

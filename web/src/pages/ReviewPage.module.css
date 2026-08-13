@@ -73,6 +73,22 @@
 
 /* ---- results ---- */
 
+.resultsBlock {
+  scroll-margin-top: 84px; /* sticky top bar */
+}
+
+.resultsToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.resultsToolbarLabel {
+  letter-spacing: 0.08em;
+}
+
 .results {
   display: flex;
   flex-direction: column;
