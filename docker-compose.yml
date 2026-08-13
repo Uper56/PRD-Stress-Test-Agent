@@ -1,0 +1,15 @@
+# Local one-command run: `docker compose up --build` → http://localhost:8000
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env # LLM_PROVIDER=openai + OPENAI_API_KEY, or omit for MockProvider
+    environment:
+      # Demo quota applies on the public Space; relax it locally.
+      RATE_LIMIT_DISABLED: "1"
+    volumes:
+      # Persist run history / proposals / ablation reports locally.
+      - ./data:/app/data
+    restart: unless-stopped

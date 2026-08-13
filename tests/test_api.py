@@ -115,6 +115,12 @@ def test_health_and_meta(client):
     assert meta["model"] in {"MockProvider", "gpt-4o-mini"}
 
 
+def test_golden_prds(client):
+    prds = client.get("/api/golden-prds").json()
+    assert len(prds) >= 1
+    assert all("filename" in p and "content" in p for p in prds)
+
+
 def test_review_requires_text(client):
     resp = client.post("/api/reviews", json={"prd_text": "   "})
     assert resp.status_code == 422

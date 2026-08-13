@@ -95,28 +95,38 @@ Deep version with per-component trade-offs: [`docs/architecture.md`](docs/archit
 ```bash
 git clone https://github.com/Uper56/PRD-Stress-Test-Agent
 cd PRD-Stress-Test-Agent
+
+# ---- Docker (recommended) ----
+cp .env.example .env           # optional: LLM_PROVIDER=openai + OPENAI_API_KEY
+docker compose up --build      # → http://localhost:8000
+
+# ---- Local dev (hot reload) ----
 pip install -e .
 pip install -r requirements.txt
+uvicorn api.app:app --reload            # backend on :8000
+cd web && npm install && npm run dev    # frontend on :5173 (proxies /api)
 
-# Free / deterministic mode (default)
-streamlit run src/ui/streamlit_app.py
+# Free / deterministic mode: no .env needed — MockProvider is the default.
 
-# Real LLM mode
-cp .env.example .env
-# edit .env: LLM_PROVIDER=openai + OPENAI_API_KEY=sk-...
-python -m src.eval --quick                 # ~$0.30, ~8 min
-streamlit run src/ui/streamlit_app.py      # 📊 Ablation tab loads latest.json
+# Eval harness (unchanged)
+python -m src.eval --quick    # ~$0.30, ~8 min with a real key
 ```
+
+The Streamlit UI still ships as a legacy fallback (`streamlit run app.py`), but the
+product surface is now the React SPA above.
 
 ## Tech stack
 
 - **Python 3.11+**, async throughout
 - **LangGraph 1.x** — agent orchestration
 - **Pydantic v2** — every state shape, every prompt boundary
-- **Streamlit ≥1.40** — two-tab UI (Stress Test + Ablation Results)
-- **MCP (FastMCP)** — the skill library is exposed over a custom FastMCP server (`src/mcp_servers/skill_server.py`, stdio, 4 tools: `list_skills` / `read_skill` / `read_skill_md` / `search_skills`). The Streamlit UI browses skills over a **live MCP connection**; the latency-sensitive critic loop reads in-process from the same `SkillRetriever` backend — MCP for external/UI access, direct read for the hot path. Verify with `python scripts/verify_mcp.py`.
+- **FastAPI** — `api/` wraps the `src/` pipeline unchanged; two-phase review runs stream over **SSE** (`POST /api/reviews` → `GET /api/reviews/{id}/stream`, replay-safe via `Last-Event-ID`)
+- **React 19 + Vite + TypeScript** — `web/` SPA: review workspace, history rail, skill library, distillation, ablation. Custom **8-bit design system** (Pixel Studio direction, magenta primary, zero-radius + hard shadows, self-hosted Pixelify Sans / Zpix / Inter fonts)
+- **Docker** — multi-stage build; one container serves API + SPA. Deployed on HF as a Docker Space.
+- **MCP (FastMCP)** — the skill library is exposed over a custom FastMCP server (`src/mcp_servers/skill_server.py`, stdio, 4 tools: `list_skills` / `read_skill` / `read_skill_md` / `search_skills`). The UI reads in-process from the same `SkillRetriever` backend; the MCP surface remains for external consumers. Verify with `python scripts/verify_mcp.py`.
 - **OpenAI ≥1.50** — `gpt-4o-mini` (critics) + currently `gpt-4o-mini` (supervisor; gpt-4o upgrade is future work)
-- **pytest + pytest-asyncio** — 102 tests, ~10s
+- **pytest + pytest-asyncio** — 118 tests, ~10s
+- **Streamlit ≥1.40** — legacy UI in `src/ui/`, kept as a rollback path
 
 ## Roadmap
 
@@ -130,7 +140,7 @@ streamlit run src/ui/streamlit_app.py      # 📊 Ablation tab loads latest.json
 - **Memento-Skills** — runtime telemetry / sliding-window acceptance / auto-deprecation lineage is borrowed from this line of work.
 - **Anthropic Agent Skills (Dec 2025)** — `SKILL.md` spec compliance means a Codex CLI extension could read this library unmodified.
 - **LangGraph (LangChain)** — the only orchestrator I've found that makes parallel-fan-out + reducer-merge first-class without hiding the wiring.
-- **UI design system** informed by [garden-skills](https://github.com/ConardLi/garden-skills) — an open-source skill distilled from Anthropic Claude Design's system prompt. The Streamlit theme uses garden-skills' "Modern tech / Blue-violet" preset (`oklch(0.55 0.25 250)` primary, Space Grotesk display + Inter body) and follows its anti-AI-cliché checklist (no purple→pink gradients, no left-border accent cards, no emoji-as-icon). Demonstrates the SKILL.md standard's composability across projects.
+- **UI design system** — the 2026-08 frontend redesign spec (`docs/superpowers/specs/`) defines a self-built 8-bit design system: "Pixel Studio" direction (Codex-style dark canvas + restrained pixel chrome), magenta brand colour deliberately kept clear of the P0/P1/P2 semantic scale, standard pixel density so long reading stays comfortable. The earlier Streamlit theme was informed by [garden-skills](https://github.com/ConardLi/garden-skills).
 
 ---
 

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from src.agents.critique_dialog import MAX_DIALOG_ROUNDS, run_critique_dialog
 from src.agents.supervisor import run_supervisor_stream
+from src.eval.ablation import list_golden_prds
 from src.graph.state import Critique
 from src.main import run_pipeline
 from src.ui.prd_loader import (
@@ -84,6 +85,10 @@ async def _execute_run(run: Run, llm) -> None:
             c.model_dump() if hasattr(c, "model_dump") else dict(c)
             for c in (state.get("critiques", []) or [])
         ]
+        # Stable per-critique uid, computed server-side — the client uses it
+        # verbatim when opening a follow-up dialog (no hash drift between sides).
+        for c in critiques:
+            c["uid"] = _critique_uid(c)
         challenges = [
             c.model_dump() if hasattr(c, "model_dump") else dict(c)
             for c in (state.get("challenges", []) or [])
@@ -287,6 +292,15 @@ async def discuss(run_id: str, payload: DiscussRequest) -> StreamingResponse:
     return StreamingResponse(
         gen(), media_type="text/event-stream", headers=SSE_HEADERS
     )
+
+
+@router.get("/golden-prds")
+def golden_prds() -> list[dict]:
+    """Built-in sample PRDs for the composer's「选择内置 PRD」mode."""
+    return [
+        {"filename": p.name, "content": p.read_text(encoding="utf-8")}
+        for p in sorted(list_golden_prds())
+    ]
 
 
 @router.post("/uploads")

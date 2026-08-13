@@ -1,32 +1,43 @@
-# React + TypeScript + Vite
+# PIXEL·PRD — web frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 + Vite + TypeScript SPA for the PRD Stress Test agent. Self-built 8-bit
+design system ("Pixel Studio" direction) — see
+`docs/superpowers/specs/2026-08-13-frontend-redesign-design.md` for the full spec.
 
-Currently, two official plugins are available:
+## Dev
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev        # http://localhost:5173, proxies /api → localhost:8000
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Run the API alongside: `uvicorn api.app:app --reload` from the repo root.
+
+## Structure
+
+```
+src/
+  styles/        fonts.css (self-hosted woff2) · tokens.css (8-bit design tokens) · base.css
+  lib/           api.ts (typed client) · useSSE.ts (SSE hook + parser) · types.ts
+  components/    13-piece pixel component library
+  pages/         ReviewPage (workspace) · SkillsPage · AblationPage
+```
+
+## Test
+
+```bash
+npm test          # vitest — SSE parser edge cases
+```
+
+## Build
+
+```bash
+npm run build     # → dist/, served by api/app.py in production (single origin)
+```
+
+## Fonts
+
+Pixelify Sans + Inter (latin, variable) and Zpix 最像素 (CJK subset) are vendored
+in `public/fonts/` — no CDN dependency, works in mainland China. Latin glyphs
+render in the pixel display font; Chinese falls through to Zpix in display
+contexts and to the system font in body text (reading comfort).

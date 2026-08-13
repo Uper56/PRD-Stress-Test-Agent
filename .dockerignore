@@ -1,0 +1,15 @@
+# Build-context exclusions — keep the image small and env-free.
+.git
+.venv
+venv
+__pycache__
+**/__pycache__
+.pytest_cache
+node_modules
+web/node_modules
+web/dist
+data
+.env
+docs
+.superpowers
+.claude
