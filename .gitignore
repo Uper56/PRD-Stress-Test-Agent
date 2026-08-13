@@ -44,3 +44,7 @@ data/results/
 
 # Brainstorming visual companion scratch dir
 .superpowers/
+
+# Keep the web frontend's lib/ (the 'lib/' pattern above targets Python lib dirs)
+!web/src/lib/
+!web/src/lib/**

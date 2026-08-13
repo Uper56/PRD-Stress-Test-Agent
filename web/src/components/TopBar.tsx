@@ -48,13 +48,20 @@ export function TopBar() {
           </NavLink>
         ))}
       </nav>
-      <button
-        className={styles.langToggle}
-        onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-        title="切换语言 / Switch language"
-      >
-        {t('lang.toggle')}
-      </button>
+      <div className={styles.langSwitch} role="group" aria-label="切换语言 / Switch language">
+        <button
+          className={`${styles.langOption} ${lang === 'zh' ? styles.langActive : ''}`}
+          onClick={() => setLang('zh')}
+        >
+          中
+        </button>
+        <button
+          className={`${styles.langOption} ${lang === 'en' ? styles.langActive : ''}`}
+          onClick={() => setLang('en')}
+        >
+          EN
+        </button>
+      </div>
       <div className={styles.status} title="模型与 demo 配额">
         <span className={styles.statusDot} aria-hidden />
         {quotaLabel}

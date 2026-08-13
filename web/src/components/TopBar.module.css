@@ -61,28 +61,35 @@
   white-space: nowrap;
 }
 
-.langToggle {
-  font-family: var(--px-display);
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
-  color: var(--px-text);
-  background: var(--px-panel-raised);
+.langSwitch {
+  display: inline-flex;
   border: var(--px-border-w) solid var(--px-border-strong);
-  box-shadow: var(--px-shadow-sm);
-  padding: 3px 9px 5px;
-  cursor: pointer;
+  background: var(--px-canvas);
   border-radius: var(--px-radius);
-  transition: transform var(--px-time-fast) var(--px-step), box-shadow var(--px-time-fast) var(--px-step);
 }
 
-.langToggle:hover {
-  color: var(--px-primary);
-  border-color: var(--px-primary);
+.langOption {
+  font-family: var(--px-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--px-muted);
+  background: transparent;
+  border: none;
+  padding: 4px 9px 5px;
+  cursor: pointer;
 }
 
-.langToggle:active {
-  transform: translate(2px, 2px);
-  box-shadow: 0 0 0 #000;
+.langOption:hover {
+  color: var(--px-text);
+}
+
+.langActive {
+  background: var(--px-primary);
+  color: var(--px-on-primary);
+}
+
+.langActive:hover {
+  color: var(--px-on-primary);
 }
 
 .statusDot {
