@@ -27,8 +27,11 @@
   flex-wrap: wrap;
 }
 
-.runId {
-  font-size: 0.72rem;
+.deckTitle {
+  font-family: var(--px-display);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   color: var(--px-primary);
 }
 

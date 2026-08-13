@@ -220,7 +220,6 @@ export function ReviewPage() {
 
         {running && (
           <RunSequence
-            runId={runId ?? '…'}
             stage={stage}
             stageLabel={STAGE_LABELS[Math.max(stage, 1)]}
             critiques={critiques}

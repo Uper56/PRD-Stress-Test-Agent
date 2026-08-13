@@ -90,7 +90,6 @@ interface AgentRow {
 }
 
 interface Props {
-  runId: string;
   /** 0..5 — mirrors the stage counter in ReviewPage */
   stage: number;
   stageLabel: string;
@@ -117,7 +116,6 @@ const SCAN_LINES = [
  * pipeline events, and the supervisor's live reasoning in a terminal window.
  */
 export function RunSequence({
-  runId,
   stage,
   stageLabel,
   critiques,
@@ -188,7 +186,7 @@ export function RunSequence({
   return (
     <div className={styles.deck} role="status" aria-live="polite">
       <div className={styles.topline}>
-        <span className={`px-mono ${styles.runId}`}>RUN #{runId}</span>
+        <span className={styles.deckTitle}>评审擂台</span>
         <PixelProgress total={5} filled={Math.max(stage, 1)} label={stageLabel} active />
       </div>
 
