@@ -133,8 +133,8 @@ export function ReviewPage() {
           setThinkingDone(true);
           pushLog(setLog, 'RUN 存档完成');
           setHistoryTick((t) => t + 1);
-          // Let the final "完成" block show before the results take over.
-          window.setTimeout(() => setRunning(false), 900);
+          // Let the CLEAR! beat (trophy + flash) play before results take over.
+          window.setTimeout(() => setRunning(false), 1500);
           break;
         }
         case 'error': {

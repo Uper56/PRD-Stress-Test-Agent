@@ -57,6 +57,16 @@ const SPRITES: Record<string, string[]> = {
     '.XXXXXX.',
     '..XXXX..',
   ],
+  trophy: [
+    '...XX...',
+    '..XXXX..',
+    '..XXXX..',
+    '.X.XX.X.',
+    '..XXXX..',
+    '...XX...',
+    '..XXXX..',
+    '.XXXXXX.',
+  ],
 };
 
 const CRITIC_COLORS: Record<string, string> = {
@@ -65,6 +75,7 @@ const CRITIC_COLORS: Record<string, string> = {
   business: '#ffc94d',
   design: '#ff5fc8',
   supervisor: '#e8e8ea',
+  trophy: '#ffc94d',
 };
 
 const PX = 2; // rendered pixel size in px
@@ -210,8 +221,31 @@ export function RunSequence({
     findings: 0,
   };
 
+  const cleared = displayStage >= 5;
+  const confetti = ['#ff5fc8', '#8bff5f', '#ffc94d', '#6ea8ff', '#ff6b5e', '#e8e8ea'];
+
   return (
-    <div className={styles.deck} role="status" aria-live="polite">
+    <div className={`${styles.deck} ${cleared ? styles.deckCleared : ''}`} role="status" aria-live="polite">
+      {cleared && (
+        <div className={styles.clearBanner} aria-hidden>
+          <span className={styles.trophyWrap}>
+            <span className={styles.trophy} style={spriteStyle('trophy')} />
+          </span>
+          <span className={styles.clearText}>CLEAR!</span>
+          <span className={styles.clearSub}>评审完成 · 已存档</span>
+          {confetti.map((color, i) => (
+            <span
+              key={i}
+              className={styles.confetti}
+              style={{
+                background: color,
+                left: `${14 + i * 13}%`,
+                animationDelay: `${i * 45}ms`,
+              }}
+            />
+          ))}
+        </div>
+      )}
       <div className={styles.topline}>
         <span className={styles.deckTitle}>评审擂台</span>
         <PixelProgress
