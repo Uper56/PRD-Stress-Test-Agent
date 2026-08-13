@@ -28,6 +28,60 @@
   gap: 6px;
   max-height: calc(100vh - 260px);
   overflow-y: auto;
+  padding-right: 2px;
+}
+
+.itemWrap {
+  position: relative;
+}
+
+.trash {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: transparent;
+  border: none;
+  color: var(--px-muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  opacity: 0;
+  transition: opacity var(--px-time-fast) var(--px-step);
+}
+
+.itemWrap:hover .trash,
+.trash:focus-visible {
+  opacity: 1;
+}
+
+.trash:hover {
+  color: var(--px-danger);
+}
+
+.confirmBar {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.confirmBar button {
+  font-family: var(--px-display);
+  font-size: 0.64rem;
+  padding: 2px 8px 4px;
+  cursor: pointer;
+  border-radius: var(--px-radius);
+}
+
+.confirmYes {
+  background: var(--px-danger);
+  border: var(--px-border-w) solid var(--px-danger);
+  color: #0d0d0f;
+}
+
+.confirmNo {
+  background: var(--px-panel-raised);
+  border: var(--px-border-w) solid var(--px-border);
+  color: var(--px-muted);
 }
 
 .item {

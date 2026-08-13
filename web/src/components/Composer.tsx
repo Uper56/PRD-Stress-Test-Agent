@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { useT } from '../lib/i18n';
 import { PixelButton } from './PixelButton';
 import styles from './Composer.module.css';
 
@@ -17,14 +18,9 @@ interface Props {
   running: boolean;
 }
 
-const SOURCES: { id: Source; label: string }[] = [
-  { id: 'paste', label: '粘贴文本' },
-  { id: 'golden', label: '选择内置 PRD' },
-  { id: 'upload', label: '上传文件' },
-];
-
 /** The PRD intake area — three sources, one「开始评审 ▶」. */
 export function Composer({ onRun, quotaError, running }: Props) {
+  const { t } = useT();
   const [source, setSource] = useState<Source>('paste');
   const [pasted, setPasted] = useState('');
   const [goldens, setGoldens] = useState<{ filename: string; content: string }[]>([]);
@@ -35,25 +31,34 @@ export function Composer({ onRun, quotaError, running }: Props) {
   const [busyUpload, setBusyUpload] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const sources: { id: Source; label: string }[] = [
+    { id: 'paste', label: t('composer.paste') },
+    { id: 'golden', label: t('composer.golden') },
+    { id: 'upload', label: t('composer.upload') },
+  ];
+
   useEffect(() => {
     api.goldenPrds().then(setGoldens).catch(() => setGoldens([]));
   }, []);
 
-  const handleFile = useCallback(async (file: File) => {
-    setBusyUpload(true);
-    setUploadError(null);
-    try {
-      const res = await api.upload(file);
-      setUploadText(res.text);
-      setUploadName(res.filename);
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : '文件读取失败');
-      setUploadText('');
-      setUploadName(null);
-    } finally {
-      setBusyUpload(false);
-    }
-  }, []);
+  const handleFile = useCallback(
+    async (file: File) => {
+      setBusyUpload(true);
+      setUploadError(null);
+      try {
+        const res = await api.upload(file);
+        setUploadText(res.text);
+        setUploadName(res.filename);
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : t('composer.uploadErr', { e: '' }));
+        setUploadText('');
+        setUploadName(null);
+      } finally {
+        setBusyUpload(false);
+      }
+    },
+    [t],
+  );
 
   const canRun =
     !running &&
@@ -76,7 +81,7 @@ export function Composer({ onRun, quotaError, running }: Props) {
   return (
     <section className={`px-card ${styles.wrap}`}>
       <div className={styles.sources} role="tablist">
-        {SOURCES.map((s) => (
+        {sources.map((s) => (
           <button
             key={s.id}
             role="tab"
@@ -93,7 +98,7 @@ export function Composer({ onRun, quotaError, running }: Props) {
         {source === 'paste' && (
           <textarea
             className={styles.textarea}
-            placeholder="把 PRD 全文粘贴到这里…（支持 Markdown）"
+            placeholder={t('composer.placeholder')}
             value={pasted}
             onChange={(e) => setPasted(e.target.value)}
             rows={10}
@@ -107,7 +112,7 @@ export function Composer({ onRun, quotaError, running }: Props) {
               value={goldenName}
               onChange={(e) => setGoldenName(e.target.value)}
             >
-              <option value="">选择一份内置 PRD…</option>
+              <option value="">{t('composer.goldenSelect')}</option>
               {goldens.map((g) => (
                 <option key={g.filename} value={g.filename}>
                   {g.filename}
@@ -116,7 +121,7 @@ export function Composer({ onRun, quotaError, running }: Props) {
             </select>
             {goldenName && (
               <details className={styles.preview}>
-                <summary>预览</summary>
+                <summary>{t('composer.preview')}</summary>
                 <pre>{goldens.find((g) => g.filename === goldenName)?.content ?? ''}</pre>
               </details>
             )}
@@ -135,21 +140,23 @@ export function Composer({ onRun, quotaError, running }: Props) {
                 if (f) void handleFile(f);
               }}
             />
-            {busyUpload && <div className={styles.hint}>解析中…</div>}
+            {busyUpload && <div className={styles.hint}>{t('composer.parsing')}</div>}
             {uploadName && (
               <div className={styles.uploadOk}>
-                ✅ 已读取 {uploadText.length} 字 · 来自 {uploadName}
+                {t('composer.uploadOk', { n: uploadText.length, f: uploadName })}
               </div>
             )}
-            {uploadError && <div className={styles.uploadErr}>📛 文件读取失败：{uploadError}</div>}
-            <div className={styles.hint}>支持 PDF / Word(.docx) / Markdown / TXT，单文件上限 2 MB</div>
+            {uploadError && (
+              <div className={styles.uploadErr}>{t('composer.uploadErr', { e: uploadError })}</div>
+            )}
+            <div className={styles.hint}>{t('composer.uploadHint')}</div>
           </>
         )}
       </div>
 
       <div className={styles.actions}>
         <PixelButton variant="primary" onClick={submit} disabled={!canRun}>
-          开始评审 ▶
+          {t('composer.run')}
         </PixelButton>
         {quotaError && <span className={styles.quotaErr}>{quotaError}</span>}
       </div>

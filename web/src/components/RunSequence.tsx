@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useT } from '../lib/i18n';
 import type { Critique } from '../lib/types';
 import { PixelButton } from './PixelButton';
 import { PixelProgress } from './PixelProgress';
@@ -115,23 +116,6 @@ interface Props {
   onViewResults: () => void;
 }
 
-const SCAN_LINES = [
-  '扫描依赖清单…',
-  '核对 SKILL 库匹配…',
-  '逐条 claim 交叉审阅…',
-  '标记证据行号…',
-  '收敛判定准备中…',
-];
-
-const STAGE_LABELS: Record<number, string> = {
-  0: '提交评审…',
-  1: 'Intake · 抽取 claim',
-  2: '4 个 Critic 评审中',
-  3: '智能体互辩',
-  4: 'Supervisor 裁决中',
-  5: '完成',
-};
-
 /** ms per progress-block — the bar walks up to the real stage, one pixel
  *  block at a time, instead of teleporting when events burst in. */
 const BLOCK_STEP_MS = 300;
@@ -151,6 +135,7 @@ export function RunSequence({
   thinkingDone,
   onViewResults,
 }: Props) {
+  const { t } = useT();
   const [scanLineIdx, setScanLineIdx] = useState(0);
   // Display stage lags the real stage by BLOCK_STEP_MS per block — events
   // burst (critiques → challenges → supervisor within ~1s), but the bar
@@ -158,6 +143,23 @@ export function RunSequence({
   const [displayStage, setDisplayStage] = useState(0);
   // The「查看结果」button appears only after the CLEAR! beat has played out.
   const [showViewButton, setShowViewButton] = useState(false);
+
+  const stageLabels: Record<number, string> = {
+    0: t('deck.submitting'),
+    1: t('deck.stage1'),
+    2: t('deck.stage2'),
+    3: t('deck.stage3'),
+    4: t('deck.stage4'),
+    5: t('deck.stage5'),
+  };
+
+  const scanLines = [
+    t('deck.scan1'),
+    t('deck.scan2'),
+    t('deck.scan3'),
+    t('deck.scan4'),
+    t('deck.scan5'),
+  ];
 
   useEffect(() => {
     if (stage <= displayStage) {
@@ -186,10 +188,10 @@ export function RunSequence({
   useEffect(() => {
     if (displayStage !== 1) return;
     const timer = setInterval(() => {
-      setScanLineIdx((i) => (i + 1) % SCAN_LINES.length);
+      setScanLineIdx((i) => (i + 1) % scanLines.length);
     }, 3200);
     return () => clearInterval(timer);
-  }, [displayStage]);
+  }, [displayStage, scanLines.length]);
 
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -248,7 +250,7 @@ export function RunSequence({
             <span className={styles.trophy} style={spriteStyle('trophy')} />
           </span>
           <span className={styles.clearText}>CLEAR!</span>
-          <span className={styles.clearSub}>评审完成 · 已存档</span>
+          <span className={styles.clearSub}>{t('deck.clear')}</span>
           {confetti.map((color, i) => (
             <span
               key={i}
@@ -263,11 +265,11 @@ export function RunSequence({
         </div>
       )}
       <div className={styles.topline}>
-        <span className={styles.deckTitle}>评审擂台</span>
+        <span className={styles.deckTitle}>{t('deck.title')}</span>
         <PixelProgress
           total={5}
           filled={displayStage}
-          label={STAGE_LABELS[displayStage] ?? ''}
+          label={stageLabels[displayStage] ?? ''}
           active
         />
       </div>
@@ -287,13 +289,15 @@ export function RunSequence({
                 {row.status === 'active' && (
                   <>
                     <span className={styles.scanGlyph}>▚</span>
-                    <span className={styles.scanText}>{SCAN_LINES[scanLineIdx]}</span>
+                    <span className={styles.scanText}>{scanLines[scanLineIdx]}</span>
                   </>
                 )}
                 {row.status === 'done' && (
                   <span className={styles.doneState}>READY ×{row.findings}</span>
                 )}
-                {row.status === 'idle' && <span className={styles.idleState}>待命</span>}
+                {row.status === 'idle' && (
+                  <span className={styles.idleState}>{t('deck.idle')}</span>
+                )}
               </span>
             </div>
           ))}
@@ -310,15 +314,15 @@ export function RunSequence({
             <span className={styles.agentState}>
               {supervisorRow.status === 'active' && (
                 <span className={styles.scanText}>
-                  推理中
+                  {t('deck.reasoning')}
                   <span className="px-cursor" aria-hidden />
                 </span>
               )}
               {supervisorRow.status === 'done' && (
-                <span className={styles.doneState}>裁决完成</span>
+                <span className={styles.doneState}>{t('deck.verdictDone')}</span>
               )}
               {supervisorRow.status === 'idle' && (
-                <span className={styles.idleState}>等待裁决</span>
+                <span className={styles.idleState}>{t('deck.awaitingVerdict')}</span>
               )}
             </span>
           </div>
@@ -350,7 +354,7 @@ export function RunSequence({
           <ThinkingTerminal
             text={thinkingText}
             inProgress={!thinkingDone}
-            label={converged ? `推理 · 第 ${rounds} 轮收敛` : '推理'}
+            label={converged ? t('deck.reasoningConverged', { r: rounds }) : t('deck.reasoningLabel')}
           />
         </div>
       )}
@@ -358,7 +362,7 @@ export function RunSequence({
       {cleared && showViewButton && (
         <div className={styles.viewBar}>
           <PixelButton variant="primary" onClick={onViewResults}>
-            查看结果 ▼
+            {t('deck.viewResults')}
           </PixelButton>
         </div>
       )}

@@ -1,28 +1,30 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useT } from '../lib/i18n';
 import type { Meta } from '../lib/types';
 import styles from './TopBar.module.css';
 
-const NAV = [
-  { to: '/', label: '评审', end: true },
-  { to: '/skills', label: 'Skill 库' },
-  { to: '/ablation', label: '消融实验' },
-];
-
-/** App chrome: pixel logo, primary nav, live model/quota status chip. */
+/** App chrome: pixel logo, primary nav, language toggle, live model/quota chip. */
 export function TopBar() {
   const [meta, setMeta] = useState<Meta | null>(null);
+  const { lang, setLang, t } = useT();
 
   useEffect(() => {
     api.meta().then(setMeta).catch(() => setMeta(null));
   }, []);
 
+  const nav = [
+    { to: '/', label: t('nav.review'), end: true },
+    { to: '/skills', label: t('nav.skills'), end: false },
+    { to: '/ablation', label: t('nav.ablation'), end: false },
+  ];
+
   const quotaLabel = !meta
-    ? '连接中…'
+    ? t('status.connecting')
     : meta.rate.disabled
-      ? `本地模式 · ${meta.model}`
-      : `今日剩余 ${meta.rate.remaining_global}/${meta.rate.per_day} 次`;
+      ? t('status.local', { model: meta.model })
+      : t('status.quota', { a: meta.rate.remaining_global, b: meta.rate.per_day });
 
   return (
     <header className={styles.bar}>
@@ -33,7 +35,7 @@ export function TopBar() {
         PIXEL·PRD
       </div>
       <nav className={styles.nav}>
-        {NAV.map((item) => (
+        {nav.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -46,6 +48,13 @@ export function TopBar() {
           </NavLink>
         ))}
       </nav>
+      <button
+        className={styles.langToggle}
+        onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+        title="切换语言 / Switch language"
+      >
+        {t('lang.toggle')}
+      </button>
       <div className={styles.status} title="模型与 demo 配额">
         <span className={styles.statusDot} aria-hidden />
         {quotaLabel}

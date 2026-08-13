@@ -1,3 +1,4 @@
+import { useT } from '../lib/i18n';
 import styles from './ThinkingTerminal.module.css';
 
 interface Props {
@@ -7,19 +8,17 @@ interface Props {
 }
 
 /** Streamed supervisor reasoning — terminal panel with a blinking block cursor. */
-export function ThinkingTerminal({
-  text,
-  inProgress,
-  label = '推理过程',
-}: Props) {
+export function ThinkingTerminal({ text, inProgress, label }: Props) {
+  const { t } = useT();
+  const resolvedLabel = label ?? t('deck.reasoningLabel');
   if (!text && !inProgress) return null;
   return (
     <div className={styles.terminal}>
       <div className={styles.head}>
         <span className={styles.prompt}>▸</span>
         <span className="px-label">
-          {label}
-          {inProgress ? '…' : '（完成）'}
+          {resolvedLabel}
+          {inProgress ? t('deck.reasoningProgress') : t('deck.reasoningDone')}
         </span>
       </div>
       <pre className={styles.body}>

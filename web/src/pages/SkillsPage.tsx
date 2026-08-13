@@ -4,11 +4,13 @@ import { PixelButton } from '../components/PixelButton';
 import { ProposalCard } from '../components/ProposalCard';
 import { SkillCard, SkillDetail } from '../components/SkillCard';
 import { api } from '../lib/api';
+import { useT } from '../lib/i18n';
 import type { Proposal, Skill } from '../lib/types';
 import styles from './SkillsPage.module.css';
 
 /** Skill library — browse, curate, and review distilled proposals. */
 export function SkillsPage() {
+  const { t } = useT();
   const [skills, setSkills] = useState<Skill[] | null>(null);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
@@ -33,10 +35,12 @@ export function SkillsPage() {
     setDistillError(null);
     try {
       const res = await api.distill();
-      setDistillMsg(res.found === 0 ? '暂未发现稳定的新 Skill 候选' : `发现 ${res.found} 个候选 Skill`);
+      setDistillMsg(
+        res.found === 0 ? t('distill.none') : t('distill.found', { n: res.found }),
+      );
       setReload((r) => r + 1);
     } catch (err) {
-      setDistillError(err instanceof Error ? err.message : '提炼失败');
+      setDistillError(err instanceof Error ? err.message : t('distill.fail'));
     } finally {
       setDistilling(false);
     }
@@ -54,12 +58,14 @@ export function SkillsPage() {
     <div className={styles.layout}>
       <section className={styles.library}>
         <div className={styles.head}>
-          <h1>Skill 库</h1>
-          <span className={styles.count}>{skills ? `${skills.length} 个 Skill 启用中` : '…'}</span>
+          <h1>{t('skills.heading')}</h1>
+          <span className={styles.count}>
+            {skills ? t('skills.count', { n: skills.length }) : '…'}
+          </span>
         </div>
 
         {skills && skills.length === 0 ? (
-          <EmptyState glyph="▚▚" title="Skill 库为空" hint="评审跑起来后，采纳反馈会塑造 Skill 库" />
+          <EmptyState glyph="▚▚" title={t('skills.empty')} hint={t('skills.emptyHint')} />
         ) : (
           <div className={styles.browser}>
             <div className={styles.list}>
@@ -77,7 +83,7 @@ export function SkillsPage() {
               {selected ? (
                 <SkillDetail key={selected.name} skill={selected} />
               ) : (
-                <EmptyState glyph="▚▚" title="选择一个 Skill 查看详情" />
+                <EmptyState glyph="▚▚" title={t('skills.select')} />
               )}
             </div>
           </div>
@@ -86,13 +92,13 @@ export function SkillsPage() {
 
       <section className={styles.distill}>
         <div className={styles.head}>
-          <h1>Skill 提炼</h1>
-          <span className={styles.count}>从历史评审中挖掘重复模式</span>
+          <h1>{t('distill.heading')}</h1>
+          <span className={styles.count}>{t('distill.sub')}</span>
         </div>
 
         <div className={styles.distillBar}>
           <PixelButton variant="primary" disabled={distilling} onClick={() => void runDistill()}>
-            {distilling ? '挖掘中…' : '🔍 提炼 Skill'}
+            {distilling ? t('distill.mining') : t('distill.run')}
           </PixelButton>
           {distillMsg && <span className={styles.distillMsg}>{distillMsg}</span>}
           {distillError && <span className={styles.distillErr}>{distillError}</span>}
@@ -101,8 +107,8 @@ export function SkillsPage() {
         {proposals.length === 0 ? (
           <EmptyState
             glyph="▞▚"
-            title="暂无待审议的 Skill 提案"
-            hint="点击「提炼 Skill」，系统会跨 PRD 挖掘重复出现的盲点模式，待你确认后加入 Skill 库。"
+            title={t('distill.empty')}
+            hint={t('distill.emptyHint')}
           />
         ) : (
           <div className={styles.proposals}>

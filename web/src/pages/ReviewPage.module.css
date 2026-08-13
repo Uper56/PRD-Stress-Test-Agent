@@ -89,6 +89,12 @@
   letter-spacing: 0.08em;
 }
 
+.resultsActions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .results {
   display: flex;
   flex-direction: column;
@@ -242,5 +248,15 @@
   }
   .side {
     position: static;
+  }
+}
+
+/* Print/PDF: keep the report clean — drop toolbars, tabs and expanders. */
+@media print {
+  .resultsToolbar,
+  .tabs,
+  .thinkingWrap,
+  .crossWrap {
+    display: none !important;
   }
 }

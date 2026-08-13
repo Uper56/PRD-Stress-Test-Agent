@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
+import { useT } from '../lib/i18n';
 import type { Proposal } from '../lib/types';
 import { PixelButton } from './PixelButton';
 import styles from './ProposalCard.module.css';
@@ -13,6 +14,7 @@ const scoreTone = (score: number) => (score >= 0.8 ? '🟢' : score >= 0.7 ? '�
 
 /** One distilled-skill proposal — approve / reject / edit + evidence. */
 export function ProposalCard({ proposal, onChanged }: Props) {
+  const { t } = useT();
   const [showEvidence, setShowEvidence] = useState(false);
   const [showMd, setShowMd] = useState(false);
   const [edited, setEdited] = useState(proposal.proposed_skill_md);
@@ -28,7 +30,7 @@ export function ProposalCard({ proposal, onChanged }: Props) {
       await fn();
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '操作失败');
+      setError(err instanceof Error ? err.message : t('proposal.fail'));
       setBusy(false);
     }
   };
@@ -42,8 +44,10 @@ export function ProposalCard({ proposal, onChanged }: Props) {
       </div>
 
       <div className={styles.caption}>
-        在 {proposal.pattern_frequency} 份不同 PRD 中重复出现 · 注入到{' '}
-        {(proposal.injected_into ?? []).join(', ') || '—'}
+        {t('proposal.caption', {
+          n: proposal.pattern_frequency,
+          r: (proposal.injected_into ?? []).join(', ') || '—',
+        })}
       </div>
 
       <div className={styles.progressBar} aria-hidden>
@@ -55,10 +59,10 @@ export function ProposalCard({ proposal, onChanged }: Props) {
 
       <div className={styles.actions}>
         <PixelButton size="sm" onClick={() => setShowEvidence((v) => !v)}>
-          📎 证据 ({proposal.evidence.length})
+          {t('proposal.evidence', { n: proposal.evidence.length })}
         </PixelButton>
         <PixelButton size="sm" onClick={() => setShowMd((v) => !v)}>
-          📄 SKILL.md
+          {t('proposal.md')}
         </PixelButton>
       </div>
 
@@ -95,7 +99,7 @@ export function ProposalCard({ proposal, onChanged }: Props) {
             )
           }
         >
-          ✅ 采纳
+          {t('proposal.approve')}
         </PixelButton>
         <PixelButton
           size="sm"
@@ -103,14 +107,14 @@ export function ProposalCard({ proposal, onChanged }: Props) {
           disabled={busy}
           onClick={() => run(() => api.proposalReject(proposal.proposal_id))}
         >
-          ❌ 驳回
+          {t('proposal.reject')}
         </PixelButton>
         <PixelButton
           size="sm"
           disabled={busy || !editedNow}
           onClick={() => run(() => api.proposalSaveEdit(proposal.proposal_id, edited))}
         >
-          ✏️ 保存修改
+          {t('proposal.saveEdit')}
         </PixelButton>
       </div>
 

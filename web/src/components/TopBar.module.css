@@ -61,6 +61,30 @@
   white-space: nowrap;
 }
 
+.langToggle {
+  font-family: var(--px-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  color: var(--px-text);
+  background: var(--px-panel-raised);
+  border: var(--px-border-w) solid var(--px-border-strong);
+  box-shadow: var(--px-shadow-sm);
+  padding: 3px 9px 5px;
+  cursor: pointer;
+  border-radius: var(--px-radius);
+  transition: transform var(--px-time-fast) var(--px-step), box-shadow var(--px-time-fast) var(--px-step);
+}
+
+.langToggle:hover {
+  color: var(--px-primary);
+  border-color: var(--px-primary);
+}
+
+.langToggle:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 #000;
+}
+
 .statusDot {
   width: 7px;
   height: 7px;

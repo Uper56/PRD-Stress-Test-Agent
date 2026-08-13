@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { postSSE } from '../lib/api';
+import { useT } from '../lib/i18n';
 import type { Critique } from '../lib/types';
 import { PixelButton } from './PixelButton';
 import { SeverityBadge } from './SeverityBadge';
@@ -24,6 +25,7 @@ const MAX_DIALOG_ROUNDS = 5; // mirrors MAX_DIALOG_ROUNDS in src/agents/critique
 
 /** One critic finding — evidence / suggested fix, feedback, follow-up chat. */
 export function CritiqueCard({ critique, discussUrl, feedback, onFeedback }: Props) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState('');
@@ -54,17 +56,17 @@ export function CritiqueCard({ critique, discussUrl, feedback, onFeedback }: Pro
             acc += String(ev.data.delta ?? '');
             setMessages([...history, { role: 'assistant', content: acc }]);
           } else if (ev.event === 'error') {
-            setDialogError(String(ev.data.message ?? '追问失败'));
+            setDialogError(String(ev.data.message ?? t('critique.discussFail')));
           }
         },
       );
       if (acc) setMessages([...history, { role: 'assistant', content: acc }]);
     } catch (err) {
-      setDialogError(err instanceof Error ? err.message : '追问失败');
+      setDialogError(err instanceof Error ? err.message : t('critique.discussFail'));
     } finally {
       setStreaming(false);
     }
-  }, [draft, streaming, discussUrl, uid, messages]);
+  }, [draft, streaming, discussUrl, uid, messages, t]);
 
   return (
     <div className={`px-card ${styles.card}`}>
@@ -83,13 +85,13 @@ export function CritiqueCard({ critique, discussUrl, feedback, onFeedback }: Pro
         <div className={styles.fields}>
           {critique.evidence && (
             <div>
-              <div className={`px-label ${styles.fieldLabel}`}>原文依据</div>
+              <div className={`px-label ${styles.fieldLabel}`}>{t('critique.evidence')}</div>
               <div className={styles.fieldValue}>{critique.evidence}</div>
             </div>
           )}
           {critique.suggested_fix && (
             <div>
-              <div className={`px-label ${styles.fieldLabel}`}>建议改进</div>
+              <div className={`px-label ${styles.fieldLabel}`}>{t('critique.fix')}</div>
               <div className={styles.fieldValue}>{critique.suggested_fix}</div>
             </div>
           )}
@@ -106,7 +108,7 @@ export function CritiqueCard({ critique, discussUrl, feedback, onFeedback }: Pro
               onClick={() => onFeedback(true)}
               title="计入 Skill acceptance_rate"
             >
-              ✓ 采纳
+              {t('critique.accept')}
             </PixelButton>
             <PixelButton
               size="sm"
@@ -115,15 +117,19 @@ export function CritiqueCard({ critique, discussUrl, feedback, onFeedback }: Pro
               onClick={() => onFeedback(false)}
               title="计入 Skill acceptance_rate"
             >
-              ✗ 误报
+              {t('critique.reject')}
             </PixelButton>
-            {feedback === 'accepted' && <span className={styles.feedbackNote}>已记录为 ✓ 采纳</span>}
-            {feedback === 'rejected' && <span className={styles.feedbackNote}>已标记为误报</span>}
+            {feedback === 'accepted' && (
+              <span className={styles.feedbackNote}>{t('critique.accepted')}</span>
+            )}
+            {feedback === 'rejected' && (
+              <span className={styles.feedbackNote}>{t('critique.rejected')}</span>
+            )}
           </>
         )}
         {discussUrl && (
           <PixelButton size="sm" onClick={() => setOpen((v) => !v)}>
-            {open ? '💬 收起追问' : '💬 继续追问'}
+            {open ? t('critique.discussClose') : t('critique.discuss')}
           </PixelButton>
         )}
       </div>
@@ -132,7 +138,9 @@ export function CritiqueCard({ critique, discussUrl, feedback, onFeedback }: Pro
         <div className={styles.dialog} ref={scrollRef}>
           {messages.map((m, i) => (
             <div key={i} className={`${styles.msg} ${styles[m.role]}`}>
-              <span className={styles.msgRole}>{m.role === 'user' ? '你' : critique.critic_id}</span>
+              <span className={styles.msgRole}>
+                {m.role === 'user' ? t('critique.you') : critique.critic_id}
+              </span>
               <span className={styles.msgBody}>{m.content}</span>
             </div>
           ))}
@@ -140,14 +148,15 @@ export function CritiqueCard({ critique, discussUrl, feedback, onFeedback }: Pro
             <div className={`${styles.msg} ${styles.assistant}`}>
               <span className={styles.msgRole}>{critique.critic_id}</span>
               <span className={styles.msgBody}>
-                思考中<span className="px-cursor" aria-hidden />
+                {t('critique.thinking')}
+                <span className="px-cursor" aria-hidden />
               </span>
             </div>
           )}
           {dialogError && <div className={styles.dialogError}>{dialogError}</div>}
           {capReached ? (
             <div className={styles.capNote}>
-              🛑 已达到追问上限（{MAX_DIALOG_ROUNDS} 轮）。如需继续请关闭后重开。
+              🛑 {t('critique.cap', { n: MAX_DIALOG_ROUNDS })}
             </div>
           ) : (
             <div className={styles.dialogInput}>
@@ -157,11 +166,16 @@ export function CritiqueCard({ critique, discussUrl, feedback, onFeedback }: Pro
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.nativeEvent.isComposing) void send();
                 }}
-                placeholder={`继续追问 ${critique.critic_id}…`}
+                placeholder={t('critique.placeholder', { c: critique.critic_id })}
                 disabled={streaming}
               />
-              <PixelButton size="sm" variant="primary" onClick={() => void send()} disabled={streaming || !draft.trim()}>
-                发送
+              <PixelButton
+                size="sm"
+                variant="primary"
+                onClick={() => void send()}
+                disabled={streaming || !draft.trim()}
+              >
+                {t('critique.send')}
               </PixelButton>
             </div>
           )}

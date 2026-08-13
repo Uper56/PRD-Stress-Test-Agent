@@ -94,3 +94,43 @@ pre {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--px-primary);
 }
+
+/* ---- print (Save as PDF) — only the results area, on a light sheet ---- */
+
+@media print {
+  :root {
+    --px-text: #16161a;
+    --px-muted: #55555c;
+    --px-canvas: #ffffff;
+    --px-panel: #ffffff;
+    --px-panel-raised: #f4f4f6;
+    --px-border: #cccccc;
+    --px-border-strong: #bbbbbb;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  /* Hide everything except the print area — the classic visibility trick
+     keeps the area's own layout intact. */
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 0;
+    scroll-margin-top: 0;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

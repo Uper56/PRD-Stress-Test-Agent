@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { useT } from '../lib/i18n';
 import type { Skill } from '../lib/types';
 import { PixelButton } from './PixelButton';
 import styles from './SkillCard.module.css';
@@ -13,6 +14,7 @@ interface Props {
 
 /** One row in the Skill library list — name, description, usage count. */
 export function SkillCard({ skill, active, onSelect, onDeprecate }: Props) {
+  const { t } = useT();
   return (
     <button
       className={`${styles.card} ${active ? styles.active : ''}`}
@@ -39,7 +41,7 @@ export function SkillCard({ skill, active, onSelect, onDeprecate }: Props) {
             }
           }}
         >
-          🗑 停用
+          {t('skills.deprecate')}
         </span>
       )}
     </button>
@@ -48,6 +50,7 @@ export function SkillCard({ skill, active, onSelect, onDeprecate }: Props) {
 
 /** Detail pane: description, tech metadata, SKILL.md viewer. */
 export function SkillDetail({ skill }: { skill: Skill }) {
+  const { t } = useT();
   const [md, setMd] = useState<string | null>(null);
   const [showMd, setShowMd] = useState(false);
   const [showTech, setShowTech] = useState(false);
@@ -64,7 +67,7 @@ export function SkillDetail({ skill }: { skill: Skill }) {
     try {
       setMd((await api.skillMd(skill.name)).md);
     } catch (err) {
-      setMdError(err instanceof Error ? err.message : '加载失败');
+      setMdError(err instanceof Error ? err.message : t('skills.loadFail'));
     }
   };
 
@@ -72,11 +75,13 @@ export function SkillDetail({ skill }: { skill: Skill }) {
     <div className={`px-card ${styles.detail}`}>
       <div className={styles.detailName}>{skill.name}</div>
       <div className={styles.detailDesc}>{skill.description ?? '—'}</div>
-      <div className={styles.detailUsage}>已应用 {skill.usage_count ?? 0} 次</div>
+      <div className={styles.detailUsage}>
+        {t('skills.usage', { n: skill.usage_count ?? 0 })}
+      </div>
 
       <div className={styles.detailActions}>
         <PixelButton size="sm" onClick={() => setShowTech((v) => !v)}>
-          技术细节
+          {t('skills.tech')}
         </PixelButton>
         <PixelButton
           size="sm"
@@ -85,15 +90,19 @@ export function SkillDetail({ skill }: { skill: Skill }) {
             if (!showMd) void loadMd();
           }}
         >
-          查看 SKILL.md
+          {t('skills.md')}
         </PixelButton>
       </div>
 
       {showTech && (
         <div className={styles.tech}>
-          <span className="px-mono">v{skill.version ?? '1.0'}</span>
-          <span className="px-mono">· 由 {skill.created_by ?? '?'} 创建</span>
-          <span className="px-mono">· 注入到 {(skill.injected_into ?? []).join(', ') || '—'}</span>
+          <span className="px-mono">
+            {t('skills.techMeta', {
+              v: skill.version ?? '1.0',
+              w: skill.created_by ?? '?',
+              r: (skill.injected_into ?? []).join(', ') || '—',
+            })}
+          </span>
         </div>
       )}
 
@@ -102,7 +111,7 @@ export function SkillDetail({ skill }: { skill: Skill }) {
           {mdError ? (
             <div className={styles.mdError}>{mdError}</div>
           ) : md === null ? (
-            <div className={styles.mdLoading}>加载中…</div>
+            <div className={styles.mdLoading}>{t('history.loading')}</div>
           ) : (
             <pre>{md}</pre>
           )}

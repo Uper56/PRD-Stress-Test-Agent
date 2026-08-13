@@ -1,4 +1,12 @@
-import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Composer, type ComposerPayload } from '../components/Composer';
 import { CritiqueCard, type FeedbackState } from '../components/CritiqueCard';
 import { HistoryRail } from '../components/HistoryRail';
@@ -7,6 +15,8 @@ import { RunSequence } from '../components/RunSequence';
 import { ThinkingTerminal } from '../components/ThinkingTerminal';
 import { VerdictPanel } from '../components/VerdictPanel';
 import { api, ApiError } from '../lib/api';
+import { buildMarkdownReport, downloadFile } from '../lib/export';
+import { useT } from '../lib/i18n';
 import type { Challenge, Critique, HistoryDetail, Verdict } from '../lib/types';
 import { useSSE } from '../lib/useSSE';
 import styles from './ReviewPage.module.css';
@@ -25,6 +35,8 @@ function pushLog(setLog: Dispatch<SetStateAction<string[]>>, line: string) {
 
 /** The review workspace — composer in, streamed verdict out. */
 export function ReviewPage() {
+  const { t, lang } = useT();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [runId, setRunId] = useState<string | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -47,40 +59,45 @@ export function ReviewPage() {
   // Guards the "done" handling against SSE replay (reconnect re-emits events).
   const doneRef = useRef(false);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const bootedFromUrl = useRef(false);
 
-  const handleRun = useCallback(async (payload: ComposerPayload) => {
-    setQuotaError(null);
-    setHistoryDetail(null);
-    setHistoryError(null);
-    setRunId(null);
-    setStreamUrl(null);
-    setStage(0);
-    setThinkingText('');
-    setThinkingDone(false);
-    setVerdict(null);
-    setCritiques([]);
-    setChallenges([]);
-    setFeedback({});
-    setLog([]);
-    doneRef.current = false;
-    try {
-      const res = await api.startReview(payload.prdText, payload.prdFilename);
-      setRunId(res.run_id);
-      setStreamUrl(res.stream_url);
-      setRunning(true);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 429) {
-        const d = err.detail as { reason?: string } | undefined;
-        setQuotaError(
-          d?.reason === 'global'
-            ? '🛑 今日 demo 额度已用尽，请明天再试。'
-            : '⏳ 本 IP 本小时已达上限，请稍后再试。',
+  const handleRun = useCallback(
+    async (payload: ComposerPayload) => {
+      setQuotaError(null);
+      setHistoryDetail(null);
+      setHistoryError(null);
+      setRunId(null);
+      setStreamUrl(null);
+      setStage(0);
+      setThinkingText('');
+      setThinkingDone(false);
+      setVerdict(null);
+      setCritiques([]);
+      setChallenges([]);
+      setFeedback({});
+      setLog([]);
+      doneRef.current = false;
+      setSearchParams({});
+      try {
+        const res = await api.startReview(
+          payload.prdText,
+          payload.prdFilename,
+          lang === 'zh' ? 'zh' : 'en',
         );
-      } else {
-        setQuotaError(err instanceof Error ? err.message : '启动评审失败');
+        setRunId(res.run_id);
+        setStreamUrl(res.stream_url);
+        setRunning(true);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 429) {
+          const d = err.detail as { reason?: string } | undefined;
+          setQuotaError(d?.reason === 'global' ? t('quota.global') : t('quota.ip'));
+        } else {
+          setQuotaError(err instanceof Error ? err.message : t('quota.startFailed'));
+        }
       }
-    }
-  }, []);
+    },
+    [lang, setSearchParams, t],
+  );
 
   useSSE(streamUrl, {
     onEvent: (ev) => {
@@ -90,12 +107,12 @@ export function ReviewPage() {
           const name = String(ev.data.name ?? '');
           if (name === 'graph') {
             setStage(1);
-            pushLog(setLog, 'INTAKE 已启动 · 解析 PRD 全文');
-            pushLog(setLog, '4 位 CRITIC 进入评审擂台');
+            pushLog(setLog, t('log.intake'));
+            pushLog(setLog, t('log.arena'));
           }
           if (name === 'supervisor') {
             setStage(4);
-            pushLog(setLog, 'SUPERVISOR 开始推理…');
+            pushLog(setLog, t('log.supervisor'));
           }
           break;
         }
@@ -103,7 +120,7 @@ export function ReviewPage() {
           const list = (ev.data.critiques as Critique[]) ?? [];
           setCritiques(list);
           setStage(2);
-          pushLog(setLog, `CRITIC 集结完毕 · 共 ${list.length} 条 finding`);
+          pushLog(setLog, t('log.critics', { n: list.length }));
           break;
         }
         case 'challenges': {
@@ -115,17 +132,17 @@ export function ReviewPage() {
           pushLog(
             setLog,
             ev.data.converged
-              ? `互辩 ROUND ${ev.data.rounds} · 收敛 ✓`
-              : `互辩 ROUND ${ev.data.rounds} · 达到最大轮数`,
+              ? t('log.converged', { r: String(ev.data.rounds ?? 0) })
+              : t('log.notConverged', { r: String(ev.data.rounds ?? 0) }),
           );
           break;
         }
         case 'thinking':
-          setThinkingText((t) => t + String(ev.data.delta ?? ''));
+          setThinkingText((txt) => txt + String(ev.data.delta ?? ''));
           break;
         case 'verdict':
           setVerdict((ev.data.verdict as Verdict) ?? null);
-          pushLog(setLog, '裁决已生成 · 写入档案…');
+          pushLog(setLog, t('log.verdict'));
           break;
         case 'done': {
           if (doneRef.current) break; // replay-safe
@@ -133,14 +150,14 @@ export function ReviewPage() {
           setVerdict((ev.data.verdict as Verdict) ?? null);
           setStage(5);
           setThinkingDone(true);
-          pushLog(setLog, 'RUN 存档完成');
-          setHistoryTick((t) => t + 1);
+          pushLog(setLog, t('log.done'));
+          setHistoryTick((tk) => tk + 1);
           // The deck stays up until the user clicks「查看结果」— the CLEAR!
           // beat gets its full moment, then the button appears in the deck.
           break;
         }
         case 'error': {
-          const message = String(ev.data.message ?? '评审失败');
+          const message = String(ev.data.message ?? t('quota.startFailed'));
           if (message.includes('历史记录保存失败')) break; // non-fatal
           pushLog(setLog, `⚠ ${message}`);
           setQuotaError(message);
@@ -158,24 +175,41 @@ export function ReviewPage() {
     reconnectMs: 3000,
   });
 
-  const handleHistorySelect = useCallback(async (id: string) => {
-    try {
-      const detail = await api.historyDetail(id);
-      setHistoryDetail(detail);
-      setHistoryError(null);
-      setLiveCriticTab(0);
-    } catch {
-      setHistoryError('无法加载这份历史评审');
-    }
-  }, []);
-
-  const handleViewResults = useCallback(() => {
-    setRunning(false);
-    // Let the results mount, then bring them into view.
+  const scrollToResults = useCallback(() => {
     requestAnimationFrame(() => {
       resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   }, []);
+
+  const handleHistorySelect = useCallback(
+    async (id: string) => {
+      try {
+        const detail = await api.historyDetail(id);
+        setHistoryDetail(detail);
+        setHistoryError(null);
+        setLiveCriticTab(0);
+        setSearchParams({ run: id });
+        scrollToResults();
+      } catch {
+        setHistoryError(t('results.loadFail'));
+      }
+    },
+    [scrollToResults, setSearchParams, t],
+  );
+
+  // Deep-link boot: ?run=<id> restores that archived review on load.
+  useEffect(() => {
+    const run = searchParams.get('run');
+    if (run && !bootedFromUrl.current) {
+      bootedFromUrl.current = true;
+      void handleHistorySelect(run);
+    }
+  }, [searchParams, handleHistorySelect]);
+
+  const handleViewResults = useCallback(() => {
+    setRunning(false);
+    scrollToResults();
+  }, [scrollToResults]);
 
   const handleClearResults = useCallback(() => {
     setRunning(false);
@@ -189,7 +223,18 @@ export function ReviewPage() {
     setFeedback({});
     setHistoryDetail(null);
     setHistoryError(null);
-  }, []);
+    setSearchParams({});
+  }, [setSearchParams]);
+
+  const handleHistoryDeleted = useCallback(
+    (deletedId: string) => {
+      if (historyDetail?.run_id === deletedId) {
+        setHistoryDetail(null);
+        setSearchParams({});
+      }
+    },
+    [historyDetail, setSearchParams],
+  );
 
   const handleFeedback = useCallback(
     async (skillId: string, uid: string, accepted: boolean) => {
@@ -202,6 +247,30 @@ export function ReviewPage() {
     },
     [],
   );
+
+  const exportMarkdown = useCallback(() => {
+    const report: HistoryDetail | null = historyDetail;
+    const base = report
+      ? {
+          prdFilename: report.prd_filename,
+          timestamp: report.timestamp,
+          verdict: report.supervisor_verdict,
+          critiques: report.critiques,
+        }
+      : {
+          prdFilename: null,
+          timestamp: new Date().toISOString(),
+          verdict: verdict ?? {},
+          critiques,
+        };
+    const md = buildMarkdownReport({ ...base, t });
+    const name = (base.prdFilename ?? t('history.custom')).replace(/\.(md|txt|pdf|docx)$/i, '');
+    downloadFile(`PRD_Review_${name}.md`, md, 'text/markdown');
+  }, [historyDetail, verdict, critiques, t]);
+
+  const printReport = useCallback(() => {
+    window.print();
+  }, []);
 
   // History view renders the persisted record; live view renders the stream.
   const historyCritiqueKey = (c: Critique) =>
@@ -225,19 +294,20 @@ export function ReviewPage() {
           key={historyTick}
           selectedId={historyDetail?.run_id ?? null}
           onSelect={(id) => void handleHistorySelect(id)}
+          onDeleted={handleHistoryDeleted}
         />
       </aside>
 
       <div className={styles.workspace}>
         <div className={styles.hero}>
-          <div className={styles.kicker}>评审工作台</div>
-          <h1 className={styles.heroTitle}>把 PRD 放进来，先看风险，再看证据。</h1>
-          <p className={styles.heroHint}>支持粘贴内容、选择示例或上传 PDF / Word 文档。</p>
+          <div className={styles.kicker}>{t('hero.kicker')}</div>
+          <h1 className={styles.heroTitle}>{t('hero.title')}</h1>
+          <p className={styles.heroHint}>{t('hero.hint')}</p>
         </div>
 
         {historyError && <div className={styles.bannerErr}>{historyError}</div>}
         {reconnecting && running && (
-          <div className={styles.banner}>📡 信号丢失 · 正在重连…</div>
+          <div className={styles.banner}>{t('reconnect.banner')}</div>
         )}
 
         <Composer onRun={(p) => void handleRun(p)} quotaError={quotaError} running={running} />
@@ -256,12 +326,20 @@ export function ReviewPage() {
         )}
 
         {resultsReady && (
-          <div ref={resultsRef} className={styles.resultsBlock}>
+          <div ref={resultsRef} className={`${styles.resultsBlock} print-area`}>
             <div className={styles.resultsToolbar}>
-              <span className={`px-label ${styles.resultsToolbarLabel}`}>评审结果</span>
-              <PixelButton size="sm" onClick={handleClearResults}>
-                ✕ 清空
-              </PixelButton>
+              <span className={`px-label ${styles.resultsToolbarLabel}`}>{t('results.label')}</span>
+              <span className={styles.resultsActions}>
+                <PixelButton size="sm" onClick={exportMarkdown}>
+                  {t('results.exportMd')}
+                </PixelButton>
+                <PixelButton size="sm" onClick={printReport}>
+                  {t('results.print')}
+                </PixelButton>
+                <PixelButton size="sm" onClick={handleClearResults}>
+                  {t('results.clear')}
+                </PixelButton>
+              </span>
             </div>
             <RunResultsView
               critiques={activeCritiques}
@@ -300,6 +378,7 @@ interface ResultsProps {
 }
 
 function RunResultsView(props: ResultsProps) {
+  const { t } = useT();
   const {
     critiques,
     challenges,
@@ -327,14 +406,18 @@ function RunResultsView(props: ResultsProps) {
 
       {thinkingText && (
         <details className={styles.thinkingWrap}>
-          <summary className={styles.thinkingSummary}>推理（完成）</summary>
-          <ThinkingTerminal text={thinkingText} inProgress={false} label="推理过程" />
+          <summary className={styles.thinkingSummary}>{t('critics.thinkingDone')}</summary>
+          <ThinkingTerminal
+            text={thinkingText}
+            inProgress={false}
+            label={t('deck.reasoningLabel')}
+          />
         </details>
       )}
 
       <section>
         <h2 className={styles.sectionHead}>
-          Critic 评审结果 <span className={styles.sectionCount}>{critiques.length}</span>
+          {t('critics.heading')} <span className={styles.sectionCount}>{critiques.length}</span>
         </h2>
         <div className={styles.tabs} role="tablist">
           {CRITIC_TABS.map(([key, label], i) => (
@@ -368,44 +451,44 @@ function RunResultsView(props: ResultsProps) {
             );
           })}
           {(byCritic[CRITIC_TABS[liveCriticTab][0]] ?? []).length === 0 && (
-            <div className={styles.noFindings}>此 Critic 暂无发现</div>
+            <div className={styles.noFindings}>{t('critics.none')}</div>
           )}
         </div>
       </section>
 
-      {challenges.length > 0 && (
-        <details className={styles.crossWrap}>
-          <summary className={styles.crossSummary}>
-            🔀 智能体互辩 · {challenges.length} 条记录
-          </summary>
-          <div className={styles.crossBody}>
-            {converged ? (
-              <div className={styles.crossOk}>✅ 第 {rounds} 轮收敛</div>
-            ) : (
-              <div className={styles.crossWarn}>⚠️ 达到最大轮数（{rounds}）仍未收敛</div>
-            )}
-            {Object.keys(byRound)
-              .sort((a, b) => Number(a) - Number(b))
-              .map((rn) => (
-                <div key={rn} className={styles.crossRound}>
-                  <div className={`px-label ${styles.crossRoundHead}`}>
-                    第 {rn} 轮 —— {byRound[Number(rn)].length} 条互辩
-                  </div>
-                  {byRound[Number(rn)].map((ch, i) => (
-                    <div key={i} className={styles.crossItem}>
-                      <span className="px-mono">
-                        {String(ch.challenger ?? '?')} → {String(ch.target_critique_id ?? '?')}
-                      </span>
-                      <div className={styles.crossCounter}>
-                        {String(ch.counter_finding ?? '')}
-                      </div>
-                    </div>
-                  ))}
+      <details className={styles.crossWrap}>
+        <summary className={styles.crossSummary}>
+          {t('cross.heading', { n: challenges.length })}
+        </summary>
+        <div className={styles.crossBody}>
+          {challenges.length === 0 ? (
+            <div className={styles.noFindings}>{t('cross.none')}</div>
+          ) : converged ? (
+            <div className={styles.crossOk}>{t('cross.converged', { r: rounds })}</div>
+          ) : (
+            <div className={styles.crossWarn}>{t('cross.notConverged', { r: rounds })}</div>
+          )}
+          {Object.keys(byRound)
+            .sort((a, b) => Number(a) - Number(b))
+            .map((rn) => (
+              <div key={rn} className={styles.crossRound}>
+                <div className={`px-label ${styles.crossRoundHead}`}>
+                  {t('cross.round', { r: rn, n: byRound[Number(rn)].length })}
                 </div>
-              ))}
-          </div>
-        </details>
-      )}
+                {byRound[Number(rn)].map((ch, i) => (
+                  <div key={i} className={styles.crossItem}>
+                    <span className="px-mono">
+                      {String(ch.challenger ?? '?')} → {String(ch.target_critique_id ?? '?')}
+                    </span>
+                    <div className={styles.crossCounter}>
+                      {String(ch.counter_finding ?? '')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+        </div>
+      </details>
     </div>
   );
 }

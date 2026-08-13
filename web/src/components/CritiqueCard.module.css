@@ -147,3 +147,12 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media print {
+  .actions {
+    display: none !important;
+  }
+  .card {
+    break-inside: avoid;
+  }
+}
