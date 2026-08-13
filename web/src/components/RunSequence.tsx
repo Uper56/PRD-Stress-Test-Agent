@@ -232,7 +232,8 @@ export function RunSequence({
     id: 'supervisor',
     label: 'Supervisor',
     sprite: 'supervisor',
-    status: displayStage >= 4 ? 'active' : 'idle',
+    status:
+      displayStage >= 5 ? 'done' : displayStage >= 4 ? 'active' : 'idle',
     findings: 0,
   };
 
@@ -308,9 +309,17 @@ export function RunSequence({
             <span className={styles.agentName}>Supervisor</span>
             <span className={styles.agentState}>
               {supervisorRow.status === 'active' && (
-                <span className={styles.scanText}>推理中<span className="px-cursor" aria-hidden /></span>
+                <span className={styles.scanText}>
+                  推理中
+                  <span className="px-cursor" aria-hidden />
+                </span>
               )}
-              {supervisorRow.status === 'idle' && <span className={styles.idleState}>等待裁决</span>}
+              {supervisorRow.status === 'done' && (
+                <span className={styles.doneState}>裁决完成</span>
+              )}
+              {supervisorRow.status === 'idle' && (
+                <span className={styles.idleState}>等待裁决</span>
+              )}
             </span>
           </div>
         </div>
