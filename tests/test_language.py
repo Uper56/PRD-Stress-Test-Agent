@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from src.agents._language import (
     detect_language,
+    force_language,
     language_directive,
     system_with_language,
 )
@@ -57,3 +58,35 @@ def test_system_with_language_appends_directive_for_chinese() -> None:
     out = system_with_language(base, chinese_prd)
     assert out.startswith(base)
     assert "简体中文" in out
+
+
+def test_forced_zh_beats_detection_for_english_prd() -> None:
+    """The UI's「中文版本」must force Chinese output even for English PRDs —
+    evidence quotes stay in the original language."""
+    token = force_language("zh")
+    try:
+        out = system_with_language("Base prompt.", "An entirely English PRD body.")
+        assert "简体中文" in out
+        assert "不要翻译引用" in out
+    finally:
+        token.var.reset(token)
+
+
+def test_forced_en_stays_directive_free() -> None:
+    token = force_language("en")
+    try:
+        chinese_prd = "用户登录后看到首页。" * 5
+        assert system_with_language("Base prompt.", chinese_prd) == "Base prompt."
+    finally:
+        token.var.reset(token)
+
+
+def test_forced_language_resets_back_to_auto() -> None:
+    """After reset, auto-detection is back."""
+    assert system_with_language("Base.", "English text here") == "Base."
+    token = force_language("zh")
+    try:
+        assert "简体中文" in system_with_language("Base.", "English text here")
+    finally:
+        token.var.reset(token)
+    assert system_with_language("Base.", "English text here") == "Base."

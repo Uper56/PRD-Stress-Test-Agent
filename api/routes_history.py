@@ -45,3 +45,12 @@ def get_history_run(run_id: str) -> dict:
     if record is None:
         raise HTTPException(status_code=404, detail="run not found")
     return record.model_dump()
+
+
+@router.delete("/history/{run_id}")
+def delete_history_run(run_id: str) -> dict:
+    """Remove one archived run (file + index entry)."""
+    removed = get_history_store().delete(run_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="run not found")
+    return {"ok": True, "deleted": run_id}

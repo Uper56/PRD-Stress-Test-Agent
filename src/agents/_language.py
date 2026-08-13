@@ -18,6 +18,7 @@ covers Japanese too via the same fallback).
 
 from __future__ import annotations
 
+import contextvars
 from typing import Literal
 
 Language = Literal["en", "zh"]
@@ -28,6 +29,19 @@ Language = Literal["en", "zh"]
 # clear this comfortably, but a single Chinese name in an English doc
 # (e.g. "by 王明") doesn't trip it.
 _CJK_THRESHOLD = 20
+
+# Per-request language override. The API sets this when the user explicitly
+# picks a UI language ("中/EN") — it beats auto-detection. contextvars keeps
+# it isolated per request tree, so concurrent runs with different languages
+# don't bleed into each other.
+_forced_language: contextvars.ContextVar[Language | None] = contextvars.ContextVar(
+    "prd_language_override", default=None
+)
+
+
+def force_language(lang: Language | None) -> contextvars.Token:
+    """Force output language for the current async context (None = auto-detect)."""
+    return _forced_language.set(lang)
 
 
 def _is_cjk(ch: str) -> bool:
@@ -68,7 +82,7 @@ _ZH_DIRECTIVE = """
 
 # 输出语言要求 / Output language requirement
 
-本次 PRD 为中文。请按以下规则填写 JSON 输出：
+请按以下规则填写 JSON 输出（无论输入 PRD 原文是什么语言）：
 
 - **人类可读的字符串值用简体中文**：包括 finding / evidence / suggested_fix /
   executive_summary / counter_finding 等所有自然语言字段的 VALUE。
@@ -77,9 +91,10 @@ _ZH_DIRECTIVE = """
   `severity` 的取值 (P0 / P1 / P2 / 而不是"严重/中等/轻微"),
   `claim_type` 的取值 (assumption / requirement / metric / scope / dependency)，
   以及任何 `skl_*` 形式的 ID。
-- 引用 PRD 原文时用原文里的语言（中文 PRD → 中文引用）。
+- **引用 PRD 原文时必须逐字保留原文语言与措辞，不要翻译引用**：
+  英文 PRD → 引用保持英文；中文 PRD → 引用保持中文。
 
-严格遵守这两条规则，否则下游解析器会拒绝你的输出。
+严格遵守这些规则，否则下游解析器会拒绝你的输出。
 """
 
 
@@ -97,7 +112,9 @@ def language_directive(lang: Language) -> str:
 def system_with_language(base_system: str, prd_text: str) -> str:
     """Convenience wrapper used at every agent's call site.
 
-    Detects the language from `prd_text`, appends the directive (if any)
-    to `base_system`, and returns the combined system prompt.
+    A forced language (set via `force_language`) wins; otherwise the
+    language is detected from `prd_text`. Appends the directive (if any)
+    to `base_system` and returns the combined system prompt.
     """
-    return base_system + language_directive(detect_language(prd_text))
+    lang = _forced_language.get() or detect_language(prd_text)
+    return base_system + language_directive(lang)

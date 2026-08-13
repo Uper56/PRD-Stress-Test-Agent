@@ -35,6 +35,9 @@ class Run:
         self.verdict: dict[str, Any] | None = None
         self.error: str | None = None
         self.history_run_id: str | None = None
+        # "zh" / "en" when the UI forces the output language, else None
+        # (auto-detect from the PRD — see src/agents/_language.py).
+        self.language: str | None = None
         self._cond = asyncio.Condition()
         self._next_id = 0
 

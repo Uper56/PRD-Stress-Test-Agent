@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from src.agents.critique_dialog import MAX_DIALOG_ROUNDS, run_critique_dialog
 from src.agents.supervisor import run_supervisor_stream
+from src.agents._language import force_language
 from src.eval.ablation import list_golden_prds
 from src.graph.state import Critique
 from src.main import run_pipeline
@@ -53,6 +54,11 @@ MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # matches the old Streamlit upload cap
 class ReviewRequest(BaseModel):
     prd_text: str = Field(min_length=1)
     prd_filename: str | None = None
+    # "auto" (default) detects from the PRD; "zh"/"en" force the verdict
+    # language regardless of the PRD's language. Evidence quotes are always
+    # kept verbatim in the PRD's original language (see the directive in
+    # src/agents/_language.py).
+    language: str = "auto"
 
 
 class DiscussRequest(BaseModel):
@@ -72,7 +78,13 @@ def _critique_uid(c: dict) -> str:
 
 
 async def _execute_run(run: Run, llm) -> None:
-    """Run the two-phase pipeline and stream every milestone into `run`."""
+    """Run the two-phase pipeline and stream every milestone into `run`.
+
+    The language context (when forced) is set here so every agent prompt
+    built during this run inherits it — contextvars propagate into the
+    asyncio task tree.
+    """
+    token = force_language(run.language) if run.language else None
     try:
         await run.push("phase", {"name": "graph"})
         state = await run_pipeline(
@@ -149,6 +161,8 @@ async def _execute_run(run: Run, llm) -> None:
         run.error = str(e)
         await run.push("error", {"message": str(e), "retryable": False})
     finally:
+        if token is not None:
+            token.var.reset(token)
         run.finished = True
         run.finished_at = time.time()
         hub.prune()
@@ -177,6 +191,7 @@ async def start_review(payload: ReviewRequest, request: Request) -> dict:
         )
 
     run = hub.create(payload.prd_text, payload.prd_filename)
+    run.language = payload.language if payload.language in ("zh", "en") else None
     asyncio.get_running_loop().create_task(_execute_run(run, get_llm()))
     return {
         "run_id": run.run_id,
@@ -275,6 +290,7 @@ async def discuss(run_id: str, payload: DiscussRequest) -> StreamingResponse:
     ]
 
     async def gen():
+        token = force_language(run.language) if run.language else None
         try:
             async for event in run_critique_dialog(
                 critic_id=critique_dict["critic_id"],
@@ -288,6 +304,9 @@ async def discuss(run_id: str, payload: DiscussRequest) -> StreamingResponse:
             yield sse_frame(0, "done", {})
         except Exception as e:  # noqa: BLE001
             yield sse_frame(0, "error", {"message": str(e), "retryable": False})
+        finally:
+            if token is not None:
+                token.var.reset(token)
 
     return StreamingResponse(
         gen(), media_type="text/event-stream", headers=SSE_HEADERS

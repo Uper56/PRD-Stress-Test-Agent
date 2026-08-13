@@ -208,6 +208,43 @@ class HistoryStore:
             out.append(r)
         return out
 
+    # ---- delete ------------------------------------------------------------
+
+    def delete(self, run_id: str) -> bool:
+        """Remove a run's JSON file and its index entry.
+
+        Files are NEVER resurrectable through this API — the call site is
+        responsible for a confirm step. Returns True if a run file was
+        actually removed. Tolerant of a missing file (already gone) and of
+        index write failures (logged, not raised).
+        """
+        removed = False
+        if self.base_dir.exists():
+            for path in self.base_dir.glob(f"run_*_{run_id[:8]}.json"):
+                try:
+                    path.unlink()
+                    removed = True
+                except OSError as e:  # noqa: BLE001
+                    logger.warning("HistoryStore.delete: unlink %s failed: %s", path, e)
+
+        index_path = self.base_dir / INDEX_FILENAME
+        if index_path.exists():
+            try:
+                kept: list[str] = []
+                for line in index_path.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    try:
+                        if json.loads(line).get("run_id") == run_id:
+                            continue
+                    except json.JSONDecodeError:
+                        pass  # keep malformed lines — never silently drop data
+                    kept.append(line)
+                _atomic_write_text(index_path, "\n".join(kept) + ("\n" if kept else ""))
+            except OSError as e:  # noqa: BLE001
+                logger.warning("HistoryStore.delete: index rewrite failed: %s", e)
+        return removed
+
     # ---- internals --------------------------------------------------------
 
     def _append_index(self, record: RunRecord) -> None:
@@ -253,6 +290,24 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
         os.replace(tmp_name, path)
     except Exception:
         # Best-effort cleanup; swallow secondary errors.
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Write text to a tempfile, then `os.replace` into place."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=path.stem + ".", suffix=".tmp", dir=str(path.parent)
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_name, path)
+    except Exception:
         try:
             os.unlink(tmp_name)
         except OSError:

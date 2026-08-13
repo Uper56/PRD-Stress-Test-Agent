@@ -126,6 +126,36 @@ def test_review_requires_text(client):
     assert resp.status_code == 422
 
 
+def test_review_accepts_language_override(client):
+    """Forced language rides along the review request without breaking the run."""
+    resp = client.post(
+        "/api/reviews", json={"prd_text": SAMPLE_PRD, "language": "zh"}
+    )
+    assert resp.status_code == 202
+    run_id = resp.json()["run_id"]
+    stream = client.get(f"/api/reviews/{run_id}/stream")
+    events = parse_sse(stream.text)
+    assert any(e["event"] == "done" for e in events)
+
+
+def test_history_delete_roundtrip(client):
+    run_id, events = run_review(client)
+    history_id = next(
+        e["data"]["history_run_id"]
+        for e in events
+        if e["event"] == "done" and e["data"].get("history_run_id")
+    )
+    assert client.get(f"/api/history/{history_id}").status_code == 200
+    resp = client.delete(f"/api/history/{history_id}")
+    assert resp.status_code == 200
+    # Gone from both the detail endpoint and the listing.
+    assert client.get(f"/api/history/{history_id}").status_code == 404
+    listing = client.get("/api/history").json()
+    assert all(r["run_id"] != history_id for r in listing)
+    # Deleting again → 404.
+    assert client.delete(f"/api/history/{history_id}").status_code == 404
+
+
 def test_review_stream_event_order(client):
     run_id, events = run_review(client)
     types = [e["event"] for e in events]
