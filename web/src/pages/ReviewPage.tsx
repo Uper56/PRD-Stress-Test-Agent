@@ -1,4 +1,4 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Composer, type ComposerPayload } from '../components/Composer';
 import { CritiqueCard, type FeedbackState } from '../components/CritiqueCard';
 import { HistoryRail } from '../components/HistoryRail';
@@ -16,14 +16,6 @@ const CRITIC_TABS: [string, string][] = [
   ['business', 'Business'],
   ['design', 'Design'],
 ];
-
-const STAGE_LABELS: Record<number, string> = {
-  1: 'Intake · 抽取 claim',
-  2: '4 个 Critic 评审中',
-  3: '智能体互辩',
-  4: 'Supervisor 裁决中',
-  5: '完成',
-};
 
 /** Append a battle-log line, collapsing immediate duplicates. */
 function pushLog(setLog: Dispatch<SetStateAction<string[]>>, line: string) {
@@ -51,6 +43,8 @@ export function ReviewPage() {
   const [historyTick, setHistoryTick] = useState(0);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [liveCriticTab, setLiveCriticTab] = useState(0);
+  // Guards the "done" handling against SSE replay (reconnect re-emits events).
+  const doneRef = useRef(false);
 
   const handleRun = useCallback(async (payload: ComposerPayload) => {
     setQuotaError(null);
@@ -66,6 +60,7 @@ export function ReviewPage() {
     setChallenges([]);
     setFeedback({});
     setLog([]);
+    doneRef.current = false;
     try {
       const res = await api.startReview(payload.prdText, payload.prdFilename);
       setRunId(res.run_id);
@@ -130,14 +125,18 @@ export function ReviewPage() {
           setVerdict((ev.data.verdict as Verdict) ?? null);
           pushLog(setLog, '裁决已生成 · 写入档案…');
           break;
-        case 'done':
+        case 'done': {
+          if (doneRef.current) break; // replay-safe
+          doneRef.current = true;
           setVerdict((ev.data.verdict as Verdict) ?? null);
           setStage(5);
-          setRunning(false);
           setThinkingDone(true);
           pushLog(setLog, 'RUN 存档完成');
           setHistoryTick((t) => t + 1);
+          // Let the final "完成" block show before the results take over.
+          window.setTimeout(() => setRunning(false), 900);
           break;
+        }
         case 'error': {
           const message = String(ev.data.message ?? '评审失败');
           if (message.includes('历史记录保存失败')) break; // non-fatal
@@ -151,7 +150,8 @@ export function ReviewPage() {
     },
     onError: () => setReconnecting(true),
     onClose: () => {
-      setRunning(false);
+      // Stream closed without a done event (error/abort) — stop the deck.
+      if (!doneRef.current) setRunning(false);
     },
     reconnectMs: 3000,
   });
@@ -221,7 +221,6 @@ export function ReviewPage() {
         {running && (
           <RunSequence
             stage={stage}
-            stageLabel={STAGE_LABELS[Math.max(stage, 1)]}
             critiques={critiques}
             rounds={rounds}
             converged={converged}

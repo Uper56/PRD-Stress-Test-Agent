@@ -90,9 +90,8 @@ interface AgentRow {
 }
 
 interface Props {
-  /** 0..5 — mirrors the stage counter in ReviewPage */
+  /** 0..5 — the real pipeline stage (driven by SSE events) */
   stage: number;
-  stageLabel: string;
   critiques: Critique[];
   rounds: number;
   converged: boolean;
@@ -110,6 +109,19 @@ const SCAN_LINES = [
   '收敛判定准备中…',
 ];
 
+const STAGE_LABELS: Record<number, string> = {
+  0: '提交评审…',
+  1: 'Intake · 抽取 claim',
+  2: '4 个 Critic 评审中',
+  3: '智能体互辩',
+  4: 'Supervisor 裁决中',
+  5: '完成',
+};
+
+/** ms per progress-block — the bar walks up to the real stage, one pixel
+ *  block at a time, instead of teleporting when events burst in. */
+const BLOCK_STEP_MS = 300;
+
 /**
  * The "waiting room" of a run — an 8-bit battle log:
  * four critic sprites scanning the PRD, a boot-sequence log driven by real
@@ -117,7 +129,6 @@ const SCAN_LINES = [
  */
 export function RunSequence({
   stage,
-  stageLabel,
   critiques,
   rounds,
   converged,
@@ -126,17 +137,33 @@ export function RunSequence({
   thinkingDone,
 }: Props) {
   const [scanLineIdx, setScanLineIdx] = useState(0);
+  // Display stage lags the real stage by BLOCK_STEP_MS per block — events
+  // burst (critiques → challenges → supervisor within ~1s), but the bar
+  // should still fill progressively.
+  const [displayStage, setDisplayStage] = useState(0);
 
-  // While the graph phase runs (stage 1), cycle decorative scan lines so the
-  // 30s LLM stretch stays alive — these describe the pipeline generically,
-  // they never fabricate results.
   useEffect(() => {
-    if (stage !== 1) return;
+    if (stage <= displayStage) {
+      setDisplayStage(stage); // snap back on reset / error
+      return;
+    }
+    const timer = setTimeout(
+      () => setDisplayStage((d) => Math.min(d + 1, stage)),
+      BLOCK_STEP_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [stage, displayStage]);
+
+  // While the graph phase runs (display stage 1), cycle decorative scan
+  // lines so the 30s LLM stretch stays alive — these describe the pipeline
+  // generically, they never fabricate results.
+  useEffect(() => {
+    if (displayStage !== 1) return;
     const timer = setInterval(() => {
       setScanLineIdx((i) => (i + 1) % SCAN_LINES.length);
     }, 3200);
     return () => clearInterval(timer);
-  }, [stage]);
+  }, [displayStage]);
 
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -149,28 +176,28 @@ export function RunSequence({
       id: 'user_advocate',
       label: 'User Advocate',
       sprite: 'user_advocate',
-      status: stage >= 2 ? 'done' : stage >= 1 ? 'active' : 'idle',
+      status: displayStage >= 2 ? 'done' : displayStage >= 1 ? 'active' : 'idle',
       findings: counts.user_advocate ?? 0,
     },
     {
       id: 'engineering',
       label: 'Engineering',
       sprite: 'engineering',
-      status: stage >= 2 ? 'done' : stage >= 1 ? 'active' : 'idle',
+      status: displayStage >= 2 ? 'done' : displayStage >= 1 ? 'active' : 'idle',
       findings: counts.engineering ?? 0,
     },
     {
       id: 'business',
       label: 'Business',
       sprite: 'business',
-      status: stage >= 2 ? 'done' : stage >= 1 ? 'active' : 'idle',
+      status: displayStage >= 2 ? 'done' : displayStage >= 1 ? 'active' : 'idle',
       findings: counts.business ?? 0,
     },
     {
       id: 'design',
       label: 'Design',
       sprite: 'design',
-      status: stage >= 2 ? 'done' : stage >= 1 ? 'active' : 'idle',
+      status: displayStage >= 2 ? 'done' : displayStage >= 1 ? 'active' : 'idle',
       findings: counts.design ?? 0,
     },
   ];
@@ -179,7 +206,7 @@ export function RunSequence({
     id: 'supervisor',
     label: 'Supervisor',
     sprite: 'supervisor',
-    status: stage >= 4 ? 'active' : 'idle',
+    status: displayStage >= 4 ? 'active' : 'idle',
     findings: 0,
   };
 
@@ -187,7 +214,12 @@ export function RunSequence({
     <div className={styles.deck} role="status" aria-live="polite">
       <div className={styles.topline}>
         <span className={styles.deckTitle}>评审擂台</span>
-        <PixelProgress total={5} filled={Math.max(stage, 1)} label={stageLabel} active />
+        <PixelProgress
+          total={5}
+          filled={displayStage}
+          label={STAGE_LABELS[displayStage] ?? ''}
+          active
+        />
       </div>
 
       <div className={styles.arena}>
@@ -247,7 +279,7 @@ export function RunSequence({
         ))}
       </div>
 
-      {(stage >= 4 || thinkingText) && (
+      {(displayStage >= 4 || thinkingText) && (
         <div className={styles.supervisorWin}>
           <div className={styles.winBar}>
             <span className={styles.winTitle}>SUPERVISOR.SYS</span>

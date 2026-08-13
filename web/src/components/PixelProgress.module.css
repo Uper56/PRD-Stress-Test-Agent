@@ -15,6 +15,7 @@
   border: var(--px-border-w) solid var(--px-border-strong);
   background: var(--px-panel);
   border-radius: var(--px-radius);
+  transition: background-color 120ms steps(2), border-color 120ms steps(2);
 }
 
 .on {
