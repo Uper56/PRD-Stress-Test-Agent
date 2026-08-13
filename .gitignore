@@ -41,3 +41,6 @@ data/results/
 .vscode/
 *.swp
 .DS_Store
+
+# Brainstorming visual companion scratch dir
+.superpowers/
