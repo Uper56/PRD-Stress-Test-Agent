@@ -23,6 +23,7 @@ from src.ui.rate_limit import PER_IP_PER_HOUR as RATE_PER_IP_PER_HOUR
 from .deps import detect_ip
 from .routes_ablation import router as ablation_router
 from .routes_history import router as history_router
+from .routes_lifecycle import router as lifecycle_router
 from .routes_review import router as review_router
 from .routes_skills import router as skills_router
 
@@ -42,6 +43,7 @@ app.include_router(review_router)
 app.include_router(history_router)
 app.include_router(skills_router)
 app.include_router(ablation_router)
+app.include_router(lifecycle_router)
 
 
 @app.get("/api/health")

@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from typing import AsyncIterator
 
 from .provider import LLMProvider, LLMResponse
@@ -482,17 +483,35 @@ _SKILL_ON_EXTRAS: dict[str, list[dict]] = {
 }
 
 
-def _critique_payload_with_skill_extras(critic_key: str) -> dict:
-    """Return the canned critique block enriched with skill-on extras."""
+def _critique_payload_with_skill_extras(critic_key: str, user: str = "") -> dict:
+    """Return the canned critique block enriched with skill-on extras.
+
+    Extras are stamped round-robin with the skill ids parsed from the
+    injected `<retrieved_skills>` block — simulating the model self-report
+    contract (`skill_id` set only for skills actually present in the
+    block). Baseline canned critiques keep `skill_id: None`.
+    """
     base = _CANNED[critic_key]
     critic_id = base["role"]
     extras = _SKILL_ON_EXTRAS.get(critic_id, [])
     if not extras:
         return base
+    ids = _parse_retrieved_skill_ids(user)
+    stamped = []
+    for i, extra in enumerate(extras):
+        stamped.append({**extra, "skill_id": ids[i % len(ids)] if ids else None})
     return {
         "role": critic_id,
-        "critiques": list(base["critiques"]) + list(extras),
+        "critiques": list(base["critiques"]) + stamped,
     }
+
+
+def _parse_retrieved_skill_ids(user: str) -> list[str]:
+    """Extract the `id="…"` values from a `<retrieved_skills>` block."""
+    block = re.search(r"<retrieved_skills>(.*?)</retrieved_skills>", user, re.DOTALL)
+    if not block:
+        return []
+    return re.findall(r'<skill id="([^"]+)"', block.group(1))
 
 
 def _match(system: str, user: str = "") -> dict | str:
@@ -522,7 +541,7 @@ def _match(system: str, user: str = "") -> dict | str:
             # injected into the user message, return the enriched critique
             # set so the rubric sees the lift skills are supposed to provide.
             if key != "intake" and "<retrieved_skills>" in user:
-                return _critique_payload_with_skill_extras(key)
+                return _critique_payload_with_skill_extras(key, user)
             return _CANNED[key]
     return {"role": "unknown", "note": "No canned response matched."}
 

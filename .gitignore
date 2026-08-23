@@ -35,6 +35,9 @@ env/
 
 # Project outputs
 data/results/
+# Skill lifecycle SQLite (source of truth for governance records; the
+# deterministic migration rebuilds it from data/results + src/skills).
+data/lifecycle/
 
 # IDE
 .idea/

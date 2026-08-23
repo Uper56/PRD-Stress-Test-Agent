@@ -4,43 +4,60 @@
   gap: 26px;
 }
 
-.library,
+.head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.head h1 {
+  margin: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  font-family: inherit;
+  font-size: 0.82rem;
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--px-muted);
+  border: 1px solid var(--px-border);
+  border-radius: var(--px-radius);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tab:hover {
+  color: var(--px-text);
+}
+
+.tabActive {
+  color: var(--px-text);
+  border-color: var(--px-primary);
+  background: color-mix(in srgb, var(--px-primary) 14%, transparent);
+}
+
+.tabBadge {
+  font-family: var(--px-mono-font, monospace);
+  font-size: 0.7rem;
+  background: var(--px-primary);
+  color: var(--px-bg, #0b0b10);
+  border-radius: 2px;
+  padding: 0 5px;
+}
+
 .distill {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.count {
-  font-size: 0.78rem;
-  color: var(--px-muted);
-}
-
-.browser {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 14px;
-  align-items: start;
-}
-
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 560px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.detail {
-  min-width: 0;
 }
 
 .distillBar {
@@ -67,10 +84,10 @@
 }
 
 @media (max-width: 800px) {
-  .browser {
-    grid-template-columns: 1fr;
+  .head {
+    gap: 10px;
   }
-  .list {
-    max-height: none;
+  .tab {
+    padding: 5px 10px;
   }
 }

@@ -1,0 +1,293 @@
+/* Skill Lifecycle Center — restrained governance typography.
+   The pixel shell stays as brand chrome (page headers, tabs, PixelButton);
+   these surfaces are deliberately quiet: Inter for prose, monospace for
+   identifiers, color reserved for status meaning. */
+
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.card {
+  border: 1px solid var(--px-border, #2a2a35);
+  background: var(--px-panel, #14141c);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cx-active {
+  border-color: var(--px-success, #3fb950);
+}
+.cx-degraded {
+  border-color: var(--px-danger, #f85149);
+}
+.cx-deprecated {
+  border-color: var(--px-muted, #6e7681);
+}
+
+.cardNum {
+  font-size: 1.6rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cardLabel {
+  font-size: 0.78rem;
+  color: var(--px-muted, #6e7681);
+}
+
+.panel {
+  border: 1px solid var(--px-border, #2a2a35);
+  background: var(--px-panel, #14141c);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panelTitle {
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.muted {
+  color: var(--px-muted, #6e7681);
+  font-size: 0.82rem;
+}
+
+.degradedList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.degradedRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.degradedMain {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.rollbackHint {
+  font-family: var(--px-mono-font, monospace);
+  font-size: 0.78rem;
+  color: var(--px-accent, #58a6ff);
+}
+
+.degradedSide {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- library table ---- */
+
+.libraryWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.table th {
+  text-align: left;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--px-muted, #6e7681);
+  font-weight: 600;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--px-border, #2a2a35);
+}
+
+.table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--px-border, #2a2a35) 60%, transparent);
+  vertical-align: top;
+}
+
+.rowOpen > td {
+  border-bottom: none;
+}
+
+.lineageRow > td {
+  background: color-mix(in srgb, var(--px-panel, #14141c) 70%, #000 30%);
+  padding: 12px 16px 16px;
+}
+
+.rowActions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lineage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mdView {
+  margin: 0;
+  font-family: var(--px-mono-font, monospace);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.lineageTitle {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--px-muted, #6e7681);
+  margin: 4px 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---- status chips ---- */
+
+.chip {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-family: var(--px-mono-font, monospace);
+  padding: 1px 8px 2px;
+  border: 1px solid var(--px-border, #2a2a35);
+  border-radius: 2px;
+}
+
+.st-active {
+  color: var(--px-success, #3fb950);
+  border-color: var(--px-success, #3fb950);
+}
+.st-degraded {
+  color: var(--px-danger, #f85149);
+  border-color: var(--px-danger, #f85149);
+}
+.st-deprecated {
+  color: var(--px-muted, #6e7681);
+}
+.st-candidate,
+.st-approved {
+  color: var(--px-accent, #58a6ff);
+}
+.st-rejected {
+  color: var(--px-muted, #6e7681);
+  text-decoration: line-through;
+}
+
+/* ---- gates ---- */
+
+.gates {
+  margin-top: 10px;
+  border-top: 1px dashed var(--px-border, #2a2a35);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gatesHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gatesTitle {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--px-muted, #6e7681);
+}
+
+.gatesButtons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gateChips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gateChip {
+  font-size: 0.74rem;
+  font-family: var(--px-mono-font, monospace);
+  padding: 2px 8px;
+  border: 1px solid var(--px-border, #2a2a35);
+  border-radius: 2px;
+  cursor: help;
+}
+
+.gate-pass {
+  color: var(--px-success, #3fb950);
+  border-color: var(--px-success, #3fb950);
+}
+.gate-fail {
+  color: var(--px-danger, #f85149);
+  border-color: var(--px-danger, #f85149);
+}
+.gate-pending {
+  color: var(--px-muted, #6e7681);
+}
+
+.shadowMetrics {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+}
+
+.metric {
+  white-space: nowrap;
+}
+
+.deltaUp {
+  color: var(--px-success, #3fb950);
+}
+.deltaDown {
+  color: var(--px-danger, #f85149);
+}
+
+.gateReason {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--px-muted, #6e7681);
+}
+
+.gateError {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--px-danger, #f85149);
+}

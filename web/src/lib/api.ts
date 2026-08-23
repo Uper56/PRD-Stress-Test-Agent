@@ -131,4 +131,30 @@ export const api = {
     }),
   ablationStatus: (jobId: string) =>
     apiFetch<import('./types').AblationJobStatus>(`/api/ablation/status/${jobId}`),
+
+  // ---- Skill Lifecycle Center ----
+  lifecycleOverview: () =>
+    apiFetch<import('./types').LifecycleOverview>('/api/lifecycle/overview'),
+  lifecycleLibrary: () =>
+    apiFetch<import('./types').LibraryRow[]>('/api/lifecycle/library'),
+  lifecycleLineage: (name: string) =>
+    apiFetch<import('./types').LifecycleLineage>(
+      `/api/lifecycle/lineage/${encodeURIComponent(name)}`,
+    ),
+  lifecycleGates: (proposalId: string) =>
+    apiFetch<import('./types').GateReportT[]>(
+      `/api/lifecycle/gates/${encodeURIComponent(proposalId)}`,
+    ),
+  lifecycleRunGates: (proposalId: string, includeShadow: boolean) =>
+    apiFetch<{ latest: Record<string, import('./types').GateReportT> }>(
+      `/api/lifecycle/gates/${encodeURIComponent(proposalId)}/run`,
+      { method: 'POST', body: JSON.stringify({ include_shadow: includeShadow }) },
+    ),
+  lifecycleRollback: (name: string) =>
+    apiFetch(`/api/lifecycle/${encodeURIComponent(name)}/rollback`, { method: 'POST' }),
+  lifecycleDeprecate: (name: string, reason?: string) =>
+    apiFetch(`/api/lifecycle/${encodeURIComponent(name)}/deprecate`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason ?? '' }),
+    }),
 };

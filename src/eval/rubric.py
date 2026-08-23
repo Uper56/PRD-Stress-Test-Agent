@@ -66,6 +66,9 @@ class RubricScore(BaseModel):
     precision: float = Field(0.0, ge=0, le=1)
     matched_defect_ids: list[str] = Field(default_factory=list)
     false_positive_count: int = 0
+    # Unmatched critiques at P0 severity — the "extra false P0" signal the
+    # lifecycle admission policy gates on (see src/lifecycle/gates.py).
+    false_p0_count: int = 0
 
 
 # ---- Manifest helpers ------------------------------------------------------
@@ -212,11 +215,17 @@ def score_run(
         critique_count = len(critiques)
         # Identity-based dedup so two critiques mapped to the same defect
         # don't both count toward precision (they won't — see _match_*).
-        matched_critique_count = len({id(c) for c, _ in matches})
+        matched_refs = {id(c) for c, _ in matches}
+        matched_critique_count = len(matched_refs)
         precision = (
             matched_critique_count / critique_count if critique_count else 0.0
         )
         false_positive_count = max(critique_count - matched_critique_count, 0)
+        false_p0_count = sum(
+            1
+            for c in critiques
+            if c.get("severity") == "P0" and id(c) not in matched_refs
+        )
 
         return RubricScore(
             structure_compliance=score_structure_compliance(critiques),
@@ -230,6 +239,7 @@ def score_run(
             precision=precision,
             matched_defect_ids=matched_ids,
             false_positive_count=false_positive_count,
+            false_p0_count=false_p0_count,
         )
     except Exception as e:  # noqa: BLE001 — fail closed
         logger.warning("score_run failed for %s: %s", prd_filename, e)

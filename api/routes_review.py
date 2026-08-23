@@ -10,7 +10,6 @@ the complete record at the end.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import time
 
@@ -22,7 +21,7 @@ from src.agents.critique_dialog import MAX_DIALOG_ROUNDS, run_critique_dialog
 from src.agents.supervisor import run_supervisor_stream
 from src.agents._language import force_language
 from src.eval.ablation import list_golden_prds
-from src.graph.state import Critique
+from src.graph.state import Critique, critique_uid as _critique_uid
 from src.main import run_pipeline
 from src.ui.prd_loader import (
     EmptyExtractionError,
@@ -69,12 +68,6 @@ class DiscussRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Pipeline driver
 # ---------------------------------------------------------------------------
-
-
-def _critique_uid(c: dict) -> str:
-    """Same stable id as the old UI — hashes (critic_id, claim_id, finding)."""
-    raw = f"{c.get('critic_id','?')}|{c.get('claim_id','?')}|{c.get('finding','')}"
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
 
 
 async def _execute_run(run: Run, llm) -> None:

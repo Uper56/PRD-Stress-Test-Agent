@@ -12,6 +12,11 @@ Layout:
       ├── learned/<skill-name>/SKILL.md     # distiller-authored (Day 9+)
       └── runtime_stats.yaml                # usage_count / status per name
 
+Lifecycle addition: `retrieve_scored()` exposes the keyword/role match
+components, rank, and rejected zero-hit candidates so the caller can
+persist explainable retrieval telemetry (SkillUseEvent). `retrieve()`
+keeps the original signature and delegates.
+
 Public surface (`SkillRetriever.load_library`, `.retrieve`,
 `format_skills_block`, `default_retriever`) is unchanged from Day 7 so
 critic code keeps working without edits.
@@ -21,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -68,6 +74,23 @@ def parse_skill_md(text: str) -> tuple[dict, str]:
 
 
 # ---- retriever -------------------------------------------------------------
+
+
+@dataclass
+class ScoredSkill:
+    """One retrieval result with its explainable score components.
+
+    `explanation` names the keyword components that contributed (the
+    role/`injected_into` match is implied by the query); `rejected`
+    lists same-role candidates that scored zero keyword hits and were
+    filtered — persisted so retrieval misses stay auditable.
+    """
+
+    skill: Skill
+    score: int
+    rank: int
+    explanation: str
+    rejected: list[str] = field(default_factory=list)
 
 
 class SkillRetriever:
@@ -159,22 +182,58 @@ class SkillRetriever:
         Skills with zero keyword hits are filtered out — keyword-free
         injection would just noise up the prompt.
         """
+        return [hit.skill for hit in self.retrieve_scored(prd_text, critic_id, top_k)]
+
+    def retrieve_scored(
+        self,
+        prd_text: str,
+        critic_id: str,
+        top_k: int = 3,
+    ) -> list[ScoredSkill]:
+        """`retrieve()` plus the score components, rank, and rejects.
+
+        The lifecycle telemetry layer persists these components verbatim
+        (SkillUseEvent.retrieval_score / .retrieval_explanation / .rank)
+        so every retrieval decision stays explainable after the fact.
+        """
         library = self.load_library()
         candidates = [
             s for s in library.active() if critic_id in s.injected_into
         ]
 
         lowered = prd_text.lower()
-        scored: list[tuple[int, float, Skill]] = []
+        scored: list[tuple[int, float, Skill, list[str]]] = []
+        rejected: list[str] = []
         for skill in candidates:
-            hits = sum(
-                _count_keyword(kw, lowered) for kw in skill.trigger_keywords
-            )
-            scored.append((hits, skill.confidence, skill))
+            components: list[str] = []
+            hits = 0
+            for kw in skill.trigger_keywords:
+                n = _count_keyword(kw, lowered)
+                if n:
+                    hits += n
+                    components.append(f"{kw}×{n}")
+            if hits == 0:
+                rejected.append(skill.name)
+                continue
+            scored.append((hits, skill.confidence, skill, components))
 
-        scored = [row for row in scored if row[0] > 0]
         scored.sort(key=lambda row: (row[0], row[1]), reverse=True)
-        return [row[2] for row in scored[:top_k]]
+        out: list[ScoredSkill] = []
+        for rank, (hits, _conf, skill, components) in enumerate(scored[:top_k], start=1):
+            explanation = (
+                f"keyword components: {', '.join(components)}; "
+                f"role match: {critic_id}; cutoff: top_k={top_k}"
+            )
+            out.append(
+                ScoredSkill(
+                    skill=skill,
+                    score=hits,
+                    rank=rank,
+                    explanation=explanation,
+                    rejected=sorted(rejected),
+                )
+            )
+        return out
 
 
 @lru_cache(maxsize=1)

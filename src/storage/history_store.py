@@ -109,7 +109,9 @@ class HistoryStore:
 
         # Skill telemetry — recomputed at save time, not threaded through
         # the graph. See module docstring for the trade-off.
-        retrieved, hits, misses = _compute_skill_telemetry(prd_text, critiques)
+        retrieved, hits, misses, event_payloads = _compute_skill_telemetry(
+            prd_text, critiques
+        )
 
         run_id = uuid.uuid4().hex
         now = datetime.now(timezone.utc)
@@ -133,6 +135,7 @@ class HistoryStore:
         run_path = self.base_dir / _run_filename(now, run_id)
         _atomic_write_json(run_path, record.model_dump())
         self._append_index(record)
+        _record_lifecycle_use_events(run_id, record.timestamp, event_payloads)
         return record
 
     # ---- read -------------------------------------------------------------
@@ -318,28 +321,111 @@ def _atomic_write_text(path: Path, content: str) -> None:
 def _compute_skill_telemetry(
     prd_text: str,
     critiques: list[dict],
-) -> tuple[set[str], set[str], set[str]]:
-    """Return (retrieved_ids, hit_ids, miss_ids).
+) -> tuple[set[str], set[str], set[str], list[dict]]:
+    """Return (retrieved_ids, hit_ids, miss_ids, lifecycle_event_payloads).
 
-    Re-runs the retriever per critic_id present in the critiques list. Lazy
-    import avoids a circular dependency at module init.
+    Re-runs the scored retriever per critic_id present in the critiques
+    list. Lazy import avoids a circular dependency at module init.
+
+    The fourth element feeds `SkillUseEvent` rows: per (critic, skill)
+    retrieval with score/rank/explanation, the model-reported `applied`
+    flag, and the stable uids of critiques attributed to the skill.
     """
+    from ..graph.state import critique_uid
     from ..skills.retriever import default_retriever
 
     retriever = default_retriever()
     critic_ids = {c.get("critic_id") for c in critiques if c.get("critic_id")}
     retrieved: set[str] = set()
-    for critic_id in critic_ids:
+    payloads: list[dict] = []
+    for critic_id in sorted(critic_ids):
         try:
-            for s in retriever.retrieve(prd_text, critic_id=str(critic_id)):
-                retrieved.add(s.id)
+            for hit in retriever.retrieve_scored(prd_text, critic_id=str(critic_id)):
+                retrieved.add(hit.skill.id)
+                attributed = [
+                    critique_uid(c)
+                    for c in critiques
+                    if c.get("skill_id") == hit.skill.id
+                    and c.get("critic_id") == critic_id
+                ]
+                payloads.append(
+                    {
+                        "skill_name": hit.skill.name,
+                        "skill_version": hit.skill.version,
+                        "critic_id": str(critic_id),
+                        "retrieval_score": float(hit.score),
+                        "retrieval_explanation": hit.explanation,
+                        "retrieval_rank": hit.rank,
+                        "retrieval_source": "in_process_retriever",
+                        "applied": bool(attributed),
+                        "attributed_critique_ids": attributed,
+                        "rejected_candidates": hit.rejected,
+                    }
+                )
         except Exception as e:  # noqa: BLE001
             logger.warning(
                 "telemetry: retrieval failed for critic_id=%s: %s", critic_id, e
             )
     hits = {c["skill_id"] for c in critiques if c.get("skill_id")}
     misses = retrieved - hits
-    return retrieved, hits, misses
+    return retrieved, hits, misses, payloads
+
+
+def _record_lifecycle_use_events(
+    run_id: str, timestamp: str, payloads: list[dict]
+) -> None:
+    """Persist telemetry payloads as immutable SkillUseEvents.
+
+    Failure-tolerant by design (same contract as save()): the lifecycle
+    store is governance audit, never a pipeline dependency. The provider
+    is recorded from config; the concrete model name is not visible at
+    this layer and stays NULL rather than being guessed.
+    """
+    if not payloads:
+        return
+    try:
+        from ..config import PROVIDER
+        from ..lifecycle.models import SkillUseEvent
+
+        store = _shared_lifecycle_store()
+        if store is None:
+            return
+        for p in payloads:
+            store.append_use_event(
+                SkillUseEvent(
+                    event_id="",
+                    run_id=run_id,
+                    occurred_at=timestamp,
+                    provider=PROVIDER,
+                    model=None,
+                    **{k: v for k, v in p.items() if k != "rejected_candidates"},
+                )
+            )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("lifecycle use-event recording failed: %s", e)
+
+
+_lifecycle_store_singleton = None
+
+
+def _shared_lifecycle_store():
+    """Process-wide LifecycleStore for telemetry writes (never closed).
+
+    A module-level reference avoids per-call connections being GC'd
+    un-closed (which surfaces as PytestUnraisableExceptionWarning under
+    `-W error`). Returns None if the store can't be built — telemetry
+    stays best-effort.
+    """
+    global _lifecycle_store_singleton
+    if _lifecycle_store_singleton is None:
+        try:
+            from ..lifecycle.store import LifecycleStore
+
+            _lifecycle_store_singleton = LifecycleStore()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("lifecycle store unavailable: %s", e)
+            return None
+    return _lifecycle_store_singleton
 
 
 def _has_unattributed_critique(record: RunRecord) -> bool:

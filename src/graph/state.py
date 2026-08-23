@@ -8,10 +8,25 @@ LangGraph merges them instead of overwriting.
 
 from __future__ import annotations
 
+import hashlib
 import operator
 from typing import Annotated, Literal, TypedDict
 
 from pydantic import BaseModel, Field
+
+
+def critique_uid(critique: dict) -> str:
+    """Stable per-critique id — hashes (critic_id, claim_id, finding).
+
+    Shared by the API layer (follow-up dialogs, feedback) and the
+    lifecycle telemetry (attributed_critique_ids) so both sides derive
+    the same id from the same critique dict.
+    """
+    raw = (
+        f"{critique.get('critic_id', '?')}|"
+        f"{critique.get('claim_id', '?')}|{critique.get('finding', '')}"
+    )
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
 
 
 Severity = Literal["P0", "P1", "P2"]

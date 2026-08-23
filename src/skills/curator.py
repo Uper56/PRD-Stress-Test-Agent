@@ -272,6 +272,34 @@ class SkillCurator:
         except Exception as e:  # noqa: BLE001
             logger.warning("SkillCurator.deprecate failed: %s", e)
 
+    def set_status_field(
+        self, skill_name: str, status: str, reason: str | None = None
+    ) -> None:
+        """Mirror a lifecycle status from the governance store into the cache.
+
+        SQLite (`src/lifecycle`) is the source of truth for lifecycle
+        status; this keeps `runtime_stats.yaml` — the retriever's read
+        path — in agreement. Accepts the extended vocabulary
+        (active/degraded/deprecated); the retriever only admits
+        `status == "active"`, so anything else is excluded from retrieval
+        without touching the hot-path code.
+        """
+        try:
+            data = self._read()
+            stats_map = data.setdefault("skills", {}) or {}
+            data["skills"] = stats_map
+            entry = stats_map.get(skill_name)
+            if entry is None:
+                return
+            entry["status"] = status
+            if reason:
+                entry["lifecycle_reason"] = reason
+            stats_map[skill_name] = entry
+            self._write(data)
+            self._bust_retriever_cache()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("SkillCurator.set_status_field failed: %s", e)
+
     # ---- internals --------------------------------------------------------
 
     def _read(self) -> dict:

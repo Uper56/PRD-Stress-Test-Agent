@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../lib/api';
 import { useT } from '../lib/i18n';
 import type { Proposal } from '../lib/types';
+import { GatePanel } from './LifecycleViews';
 import { PixelButton } from './PixelButton';
 import styles from './ProposalCard.module.css';
 
@@ -12,7 +13,7 @@ interface Props {
 
 const scoreTone = (score: number) => (score >= 0.8 ? '🟢' : score >= 0.7 ? '🟡' : '🔴');
 
-/** One distilled-skill proposal — approve / reject / edit + evidence. */
+/** One distilled-skill proposal — gates, evidence, PM decision. */
 export function ProposalCard({ proposal, onChanged }: Props) {
   const { t } = useT();
   const [showEvidence, setShowEvidence] = useState(false);
@@ -20,6 +21,7 @@ export function ProposalCard({ proposal, onChanged }: Props) {
   const [edited, setEdited] = useState(proposal.proposed_skill_md);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [allGatesPassed, setAllGatesPassed] = useState(false);
 
   const editedNow = edited !== proposal.proposed_skill_md;
 
@@ -88,11 +90,18 @@ export function ProposalCard({ proposal, onChanged }: Props) {
         />
       )}
 
+      <GatePanel proposalId={proposal.proposal_id} onGatesChanged={setAllGatesPassed} />
+
+      {!allGatesPassed && (
+        <div className={styles.gateHint}>{t('lc.gates.needAll')}</div>
+      )}
+
       <div className={styles.buttons}>
         <PixelButton
           size="sm"
           variant="success"
-          disabled={busy}
+          disabled={busy || !allGatesPassed}
+          title={allGatesPassed ? undefined : t('lc.gates.needAll')}
           onClick={() =>
             run(() =>
               api.proposalApprove(proposal.proposal_id, editedNow ? edited : undefined),

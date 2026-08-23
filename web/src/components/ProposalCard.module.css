@@ -89,3 +89,11 @@
   font-size: 0.78rem;
   color: var(--px-danger);
 }
+
+.gateHint {
+  font-size: 0.76rem;
+  color: var(--px-muted);
+  border: 1px dashed var(--px-border);
+  padding: 4px 8px;
+  border-radius: var(--px-radius);
+}

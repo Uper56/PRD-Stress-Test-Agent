@@ -17,8 +17,10 @@ import api.deps
 import api.routes_review
 import api.routes_skills
 import api.routes_ablation
+import api.routes_lifecycle
 from api.app import app
 from src.agents.skill_distiller import SkillProposal
+from src.lifecycle.store import LifecycleStore
 from src.llm.mock_provider import MockProvider
 from src.skills.curator import SkillCurator
 from src.storage import HistoryStore, ProposalsStore
@@ -75,7 +77,11 @@ def client(tmp_path, monkeypatch) -> TestClient:
     monkeypatch.setattr(
         api.deps,
         "_proposals_store",
-        ProposalsStore(tmp_path / "proposals", learned_dir=tmp_path / "learned"),
+        ProposalsStore(
+            tmp_path / "proposals",
+            learned_dir=tmp_path / "learned",
+            runtime_stats_path=tmp_path / "runtime_stats.yaml",
+        ),
     )
     # Skill usage telemetry must not mutate the repo's runtime_stats.yaml.
     monkeypatch.setattr(
@@ -83,6 +89,12 @@ def client(tmp_path, monkeypatch) -> TestClient:
         "_curator",
         SkillCurator(runtime_stats_path=tmp_path / "runtime_stats.yaml"),
     )
+    # Lifecycle governance must not touch the repo's data/lifecycle db or
+    # trigger the legacy migration — point it at an isolated empty store.
+    lifecycle = LifecycleStore(tmp_path / "lifecycle" / "skills.db")
+    monkeypatch.setattr(api.deps, "_lifecycle_store", lifecycle)
+    monkeypatch.setattr(api.deps, "_migration_attempted", True)
+    monkeypatch.setattr(api.routes_lifecycle, "get_llm", lambda: MockProvider())
     # Ablation reads/writes must also stay inside tmp (repo ships a real latest.json).
     monkeypatch.setattr(
         api.routes_ablation,
@@ -91,6 +103,7 @@ def client(tmp_path, monkeypatch) -> TestClient:
     )
     with TestClient(app) as c:
         yield c
+    lifecycle.close()
 
 
 def run_review(client: TestClient) -> tuple[str, list[dict]]:
@@ -267,29 +280,110 @@ def test_skills_list_and_feedback(client):
         assert resp.status_code == 200 and resp.json()["accepted"] is True
 
 
+def _seed_history_runs(history: HistoryStore, texts: list[str]) -> list[str]:
+    """Persist N runs with distinct PRD texts; return their run_ids."""
+    run_ids = []
+    for i, text in enumerate(texts):
+        record = history.save(
+            {
+                "prd_text": text,
+                "critiques": [],
+                "challenges": [],
+                "final_report": {},
+            },
+            prd_filename=f"seed_prd_{i}.md",
+        )
+        assert record is not None
+        run_ids.append(record.run_id)
+    return run_ids
+
+
 def test_proposal_approve_flow(client, tmp_path):
-    store = ProposalsStore(tmp_path / "proposals", learned_dir=tmp_path / "learned")
-    proposal = SkillProposal(
-        proposal_id="p_test_1",
-        proposed_name="demo-skill",
-        proposed_skill_md=(
-            "---\nname: demo-skill\ndescription: test proposal\ninjected_into: [engineering]\n---\n\n"
-            "Look for missing retry logic."
-        ),
-        injected_into=["engineering"],
-        generalization_score=0.9,
-        pattern_frequency=3,
-        created_at="2026-08-13T00:00:00Z",
+    history = api.deps.get_history_store()
+    run_ids = _seed_history_runs(
+        history,
+        [
+            "# PRD A\nusers pay via payment api integration for the flow screen\n",
+            "# PRD B\nusers see a flow screen when the payment api fails\n",
+            "# PRD C\nusers import data through the payment api on the flow screen\n",
+        ],
     )
-    store.save(proposal)
+
+    proposal_md = (
+        "---\n"
+        "name: demo-skill\n"
+        "description: Flag PRDs whose payment api usage leaves users without a flow screen.\n"
+        'version: "1.0"\n'
+        "created_by: distiller\n"
+        "injected_into:\n  - engineering\n"
+        "trigger_keywords: [users, payment, api, data]\n"
+        "---\n\n"
+        "# Skill: demo-skill\n\n"
+        "## When to apply\nThe PRD mentions payment api usage.\n\n"
+        "## Instruction\nCheck the user-facing flow screen.\n"
+    )
+    store = api.deps.get_proposals_store()
+    store.save(
+        SkillProposal(
+            proposal_id="p_test_1",
+            proposed_name="demo-skill",
+            proposed_skill_md=proposal_md,
+            injected_into=["engineering"],
+            generalization_score=0.9,
+            evidence=[{"run_id": rid, "critique_excerpt": "[P2] demo"} for rid in run_ids],
+            pattern_frequency=3,
+            created_at="2026-08-13T00:00:00Z",
+        )
+    )
 
     pending = client.get("/api/proposals").json()
     assert any(p["proposal_id"] == "p_test_1" for p in pending)
 
+    # Approval is refused before any gate has run.
     resp = client.post("/api/proposals/p_test_1/approve")
-    assert resp.status_code == 200
+    assert resp.status_code == 409
+    assert "not run" in resp.json()["detail"]
+
+    # Deterministic gates first.
+    resp = client.post("/api/lifecycle/gates/p_test_1/run", json={})
+    assert resp.status_code == 200, resp.text
+    latest = resp.json()["latest"]
+    assert set(latest) == {"spec", "evidence", "novelty"}
+    assert latest["spec"]["passed"], latest["spec"]["detail"]
+    assert latest["evidence"]["passed"], latest["evidence"]["detail"]
+    assert latest["novelty"]["passed"], latest["novelty"]["detail"]
+
+    # Still refused: the shadow gate hasn't run.
+    resp = client.post("/api/proposals/p_test_1/approve")
+    assert resp.status_code == 409
+    assert "shadow" in resp.json()["detail"]
+
+    # Full gate set including the counterfactual shadow evaluation. Under
+    # MockProvider the OFF baseline is the current library and the ON arm
+    # adds only the candidate — identical critique sets, so the policy
+    # deterministically passes with a neutral (below-preference) note.
+    resp = client.post("/api/lifecycle/gates/p_test_1/run", json={"include_shadow": True})
+    assert resp.status_code == 200, resp.text
+    latest = resp.json()["latest"]
+    assert set(latest) == {"spec", "evidence", "novelty", "shadow"}
+    assert latest["shadow"]["passed"], latest["shadow"]["detail"]
+
+    resp = client.post("/api/proposals/p_test_1/approve")
+    assert resp.status_code == 200, resp.text
     assert (tmp_path / "learned" / "demo-skill" / "SKILL.md").exists()
     assert client.get("/api/proposals").json() == []
+
+    # Lifecycle records: lineage + active status + audit transitions.
+    lineage = client.get("/api/lifecycle/lineage/demo-skill").json()
+    assert lineage["versions"][0]["admission_actor"] == "pm:ui"
+    assert lineage["versions"][0]["source_proposal_id"] == "p_test_1"
+    transitions = [t["to_status"] for t in lineage["transitions"]]
+    assert transitions == ["approved", "active"]
+    statuses = {
+        row["skill_name"]: row["status"]
+        for row in client.get("/api/lifecycle/library").json()
+    }
+    assert statuses.get("demo-skill") == "active"
 
 
 def test_proposal_reject_flow(client, tmp_path):
